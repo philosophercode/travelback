@@ -1,0 +1,399 @@
+# TravelBack - Cursor Rules
+
+## Project Overview
+TravelBack is an AI-powered backend API that processes trip photos, extracts metadata, generates descriptions, and creates narrative summaries for travel experiences.
+
+## Tech Stack
+
+### Core Technologies
+- **Runtime**: Node.js 20+
+- **Language**: TypeScript 5.3+ (strict mode enabled)
+- **Framework**: Express 4.x
+- **Database**: PostgreSQL 16
+- **Database Client**: `pg` (node-postgres) with connection pooling
+
+### AI/ML Stack
+- **LLM Provider**: OpenAI API (abstracted via provider pattern)
+- **Default Models**: `gpt-4o-mini` for both text and vision
+- **Image Processing**: `sharp` for resize/optimize
+- **EXIF Extraction**: `exifr`
+
+### Storage
+- **Local Dev**: Filesystem (`./uploads`)
+- **Production**: Supabase Storage (S3-compatible)
+- **Pattern**: Provider abstraction for easy swapping
+
+### Geocoding
+- **Service**: Nominatim (OpenStreetMap) - free, no API key
+- **Fallback**: LLM visual location detection
+
+## Architecture Patterns
+
+### Layered Architecture
+Follow strict separation of concerns:
+1. **Routes** (`src/routes/`) - HTTP endpoint definitions only
+2. **Controllers** (`src/controllers/`) - Request/response handling, validation
+3. **Services** (`src/services/`) - Business logic and orchestration
+4. **Agents** (`src/agents/`) - AI processing (LLM interactions)
+5. **Repositories** (`src/database/repositories/`) - Database access (CRUD)
+
+### Provider Pattern
+- Use abstract interfaces for LLM providers, storage providers, etc.
+- Make it easy to swap implementations (e.g., OpenAI → Anthropic, Local → Supabase)
+- Example: `LLMProvider` interface in `src/agents/llm-provider.ts`
+
+### Design Principles
+- **Separation of Concerns** - Each layer has one responsibility
+- **Type Safety** - Full TypeScript with strict mode
+- **Structured Data** - All AI outputs are typed JSON (JSONB in DB)
+- **Async Processing** - Non-blocking photo processing
+- **Graceful Degradation** - Partial failures don't stop pipeline
+
+## Code Style & Conventions
+
+### TypeScript
+- Use strict mode (`strict: true` in tsconfig.json)
+- Prefer interfaces over types for object shapes
+- Use explicit return types for public functions
+- Avoid `any` - use `unknown` if type is truly unknown
+- Use enums for constants (e.g., `ProcessingStatus`)
+
+### Naming Conventions
+- **Files**: kebab-case (`trip.repository.ts`, `image-description.agent.ts`)
+- **Classes**: PascalCase (`TripRepository`, `ImageDescriptionAgent`)
+- **Functions/Variables**: camelCase (`createTrip`, `photoCount`)
+- **Constants**: UPPER_SNAKE_CASE (`MAX_CONCURRENT_PHOTOS`)
+- **Database tables**: snake_case (`day_itineraries`)
+
+### File Structure
+```
+src/
+├── server.ts                    # Express app entry point
+├── config.ts                    # Environment configuration
+├── routes/                      # API routes (endpoint definitions)
+├── controllers/                 # Request/response handlers
+├── services/                    # Business logic
+├── agents/                      # AI processing (LLM interactions)
+├── database/
+│   ├── db.ts                    # PostgreSQL connection
+│   ├── schema.sql               # Database schema
+│   └── repositories/            # Database access (CRUD)
+├── types/                       # TypeScript interfaces
+├── middleware/                  # Express middleware
+└── utils/                       # Helper functions
+```
+
+### Import Organization
+1. External dependencies
+2. Internal modules (by layer: routes → controllers → services → agents → repositories)
+3. Types
+4. Utils
+
+Example:
+```typescript
+import express from 'express';
+import { Request, Response } from 'express';
+
+import { createTrip } from '../controllers/trips.controller';
+import { TripRepository } from '../database/repositories/trip.repository';
+import { Trip } from '../types';
+import { logger } from '../utils/logger';
+```
+
+## Database Patterns
+
+### Primary Keys
+- Use UUID (`uuid_generate_v4()`) for all primary keys
+- Never use auto-incrementing integers
+
+### JSONB Usage
+- Store all AI-generated content in JSONB columns
+- Use GIN indexes on JSONB columns for search
+- Define TypeScript interfaces for JSONB structure
+- Validate JSONB structure before saving
+
+### Naming
+- Tables: snake_case (`day_itineraries`)
+- Columns: snake_case (`captured_at`, `processing_status`)
+- Foreign keys: `{table}_id` (e.g., `trip_id`)
+
+### Constraints
+- Use `ON DELETE CASCADE` for foreign keys where appropriate
+- Add `NOT NULL` constraints for required fields
+- Use `UNIQUE` constraints for business rules (e.g., one itinerary per day per trip)
+
+### Indexes
+- Index all foreign keys
+- Index timestamp columns used for sorting
+- Index location columns used for filtering
+- Use GIN indexes on JSONB columns for full-text search
+
+## API Design
+
+### Response Format
+Always use consistent response structure:
+
+**Success:**
+```typescript
+{
+  success: true,
+  data: { ... }
+}
+```
+
+**Error:**
+```typescript
+{
+  success: false,
+  error: {
+    code: "ERROR_CODE",
+    message: "Human-readable message",
+    details?: { ... }
+  }
+}
+```
+
+### HTTP Methods
+- `POST` - Create resources
+- `GET` - Read resources
+- `PUT` - Update resources (full replacement)
+- `PATCH` - Partial updates
+- `DELETE` - Delete resources
+
+### Status Codes
+- `200` - Success
+- `201` - Created
+- `400` - Bad Request (validation errors)
+- `404` - Not Found
+- `500` - Internal Server Error
+
+### Endpoint Naming
+- Use plural nouns: `/api/trips`, `/api/trips/:id/photos`
+- Use nested resources: `/api/trips/:tripId/photos`
+- Use kebab-case for multi-word resources
+
+## Error Handling
+
+### Levels
+1. **Route Level**: Try-catch in controllers
+2. **Service Level**: Business logic errors
+3. **Agent Level**: LLM failures, retries
+4. **Global**: Express error middleware
+
+### Error Types
+- Create custom error classes extending `Error`
+- Include error codes for programmatic handling
+- Provide user-friendly messages
+- Log detailed errors server-side
+
+### Graceful Degradation
+- If LLM fails → Mark photo as `failed`, continue with others
+- If geocoding fails → Use raw coordinates or `unknown`
+- If visual location fails → Leave location empty
+- Never let one failure stop the entire pipeline
+
+## Processing Pipeline
+
+### Status Flow
+- Photos: `pending` → `processing` → `completed` / `failed`
+- Trips: `not_started` → `processing` → `completed` / `failed`
+
+### Concurrency
+- Process photos concurrently (configurable via `MAX_CONCURRENT_PHOTOS`)
+- Use `Promise.all()` with concurrency limits
+- Handle rate limits gracefully
+
+### Pipeline Steps
+1. Extract EXIF metadata
+2. Describe each photo (AI vision)
+3. Get location (geocode or AI visual)
+4. Cluster photos by day
+5. Generate day itineraries (AI text)
+6. Create trip overview (AI text)
+
+## Type Definitions
+
+### Core Types
+Define all types in `src/types/index.ts`:
+- `Trip` - Trip entity
+- `Photo` - Photo entity
+- `DayItinerary` - Day itinerary entity
+- `PhotoDescription` - AI-generated photo description (JSONB structure)
+- `DayItinerarySummary` - AI-generated day summary (JSONB structure)
+- `TripOverview` - AI-generated trip overview (JSONB structure)
+- `ProcessingStatus` - Enum for processing states
+
+### JSONB Structures
+Always define TypeScript interfaces for JSONB columns:
+```typescript
+interface PhotoDescription {
+  mainSubject: string;
+  setting: string;
+  activities: string[];
+  mood: string;
+  timeOfDay: string;
+  weather: string;
+  notableDetails: string[];
+  visualQuality: string;
+}
+```
+
+## Environment Variables
+
+### Required
+- `DATABASE_URL` - PostgreSQL connection string
+- `OPENAI_API_KEY` - OpenAI API key
+
+### Optional (with defaults)
+- `PORT` - Server port (default: 3000)
+- `NODE_ENV` - Environment (development/production)
+- `LLM_TEXT_MODEL` - Text model (default: gpt-4o-mini)
+- `LLM_VISION_MODEL` - Vision model (default: gpt-4o-mini)
+- `LLM_TEMPERATURE` - Model temperature (default: 0.7)
+- `LLM_MAX_TOKENS` - Max tokens (default: 2000)
+- `STORAGE_PROVIDER` - local or supabase (default: local)
+- `UPLOAD_DIR` - Local storage directory (default: ./uploads)
+- `MAX_FILE_SIZE_MB` - Max upload size (default: 10)
+- `MAX_CONCURRENT_PHOTOS` - Parallel processing limit (default: 3)
+
+### Configuration
+- Load all config in `src/config.ts`
+- Validate required environment variables on startup
+- Provide sensible defaults for optional variables
+
+## Testing (Future)
+
+### Test Structure
+- Unit tests: Test services and agents in isolation (mock LLM)
+- Integration tests: Test full pipeline with test images
+- E2E tests: Test API endpoints
+
+### Mocking
+- Mock LLM providers for unit tests
+- Use test database for integration tests
+- Use test images for photo processing tests
+
+## Security
+
+### Current (MVP)
+- Parameterized queries (prevent SQL injection)
+- Input validation in controllers
+- File upload validation (type, size)
+
+### Future
+- Authentication middleware (JWT)
+- Authorization checks (user owns trip)
+- Rate limiting
+- API key validation
+- Row-level security (RLS) in database
+
+## Performance
+
+### Targets
+- Photo upload: < 1s per photo
+- EXIF extraction: < 100ms per photo
+- Image description: < 5s per photo (LLM call)
+- Day itinerary: < 10s per day
+- Trip overview: < 15s per trip
+- API response time: < 200ms (non-processing endpoints)
+
+### Optimization
+- Use connection pooling for database
+- Process photos concurrently (with limits)
+- Use prepared statements
+- Index frequently queried columns
+- Cache LLM responses where appropriate (future)
+
+## Logging
+
+### Levels
+- `error` - Errors that need attention
+- `warn` - Warnings (e.g., geocoding failures)
+- `info` - Important events (e.g., trip processing started)
+- `debug` - Detailed debugging info
+
+### What to Log
+- API requests (method, path, status)
+- Processing pipeline steps
+- LLM API calls (cost tracking)
+- Errors with stack traces
+- Performance metrics (optional)
+
+## Code Quality
+
+### Best Practices
+- Write self-documenting code (clear variable/function names)
+- Add JSDoc comments for public APIs
+- Keep functions small and focused (single responsibility)
+- Avoid deep nesting (max 3 levels)
+- Use early returns to reduce nesting
+- Extract magic numbers/strings to constants
+
+### Comments
+- Explain "why" not "what"
+- Document complex algorithms
+- Note any non-obvious business logic
+- Mark TODOs with context
+
+## Git Conventions
+
+### Commit Messages
+- Use present tense: "Add photo processing" not "Added photo processing"
+- Be descriptive but concise
+- Reference issues/PRs when applicable
+
+### Branch Naming
+- `feature/` - New features
+- `fix/` - Bug fixes
+- `refactor/` - Code refactoring
+- `docs/` - Documentation updates
+
+## When Adding New Features
+
+1. **Define Types First** - Add interfaces to `src/types/index.ts`
+2. **Create Repository** - Add database access methods
+3. **Create Service** - Add business logic
+4. **Create Agent** (if AI-related) - Add LLM interactions
+5. **Create Controller** - Add request/response handling
+6. **Create Route** - Add HTTP endpoint
+7. **Update Schema** (if needed) - Add migrations
+
+## Common Patterns
+
+### Repository Pattern
+```typescript
+class TripRepository {
+  async create(data: CreateTripData): Promise<Trip> { ... }
+  async findById(id: string): Promise<Trip | null> { ... }
+  async update(id: string, data: UpdateTripData): Promise<Trip> { ... }
+}
+```
+
+### Service Pattern
+```typescript
+class ProcessingService {
+  async processTrip(tripId: string): Promise<void> {
+    // Orchestrate pipeline steps
+  }
+}
+```
+
+### Agent Pattern
+```typescript
+class ImageDescriptionAgent {
+  async describePhoto(image: Buffer, exif: EXIFData): Promise<PhotoDescription> {
+    // LLM interaction with structured output
+  }
+}
+```
+
+## Remember
+
+- **Type Safety First** - Use TypeScript types everywhere
+- **Fail Gracefully** - One photo failure shouldn't stop the trip
+- **Structure Everything** - All AI outputs are typed JSON
+- **Abstract Providers** - Make it easy to swap implementations
+- **Layer Separation** - Don't mix concerns between layers
+- **Database First** - Design schema before writing code
+- **Cost Conscious** - Use `gpt-4o-mini` by default, track usage
+
