@@ -7,8 +7,9 @@ import { exifService } from '../services/exif.service';
 import { locationService } from '../services/location.service';
 import { processingService } from '../services/processing.service';
 import { sseService } from '../services/sse.service';
+import { narrationService } from '../services/narration.service';
 import { AppError } from '../middleware/error-handler';
-import { ApiResponse, CreateTripData } from '../types';
+import { ApiResponse, CreateTripData, NarrationState, Photo, ProcessingStatus } from '../types';
 import { logger } from '../utils/logger';
 
 const tripRepo = new TripRepository();
@@ -56,7 +57,7 @@ export async function createTrip(req: Request, res: Response): Promise<void> {
  */
 export async function createTripWithPhotos(req: Request, res: Response): Promise<void> {
   const uploadStartTime = Date.now();
-  const { name, startDate } = req.body;
+  const { name, startDate, enableNarration } = req.body;
   const files = req.files as Express.Multer.File[];
 
   if (!files || files.length === 0) {
@@ -70,6 +71,9 @@ export async function createTripWithPhotos(req: Request, res: Response): Promise
     ? name.trim()
     : generateDefaultTripName();
 
+  // Parse narration flag (can be string "true"/"false" from form data or boolean)
+  const narrationEnabled = enableNarration === 'true' || enableNarration === true;
+
   // Create trip
   const tripData: CreateTripData = {
     name: tripName,
@@ -78,6 +82,18 @@ export async function createTripWithPhotos(req: Request, res: Response): Promise
 
   const trip = await tripRepo.create(tripData);
   logger.info(`[Trip ${trip.id}] ✅ Trip created: "${tripName}"`);
+
+  // Set narration state if enabled
+  if (narrationEnabled) {
+    const narrationState: NarrationState = {
+      enabled: true,
+      status: 'not_started',
+      completedDays: [],
+      completedPhotos: [],
+    };
+    await tripRepo.updateNarrationState(trip.id, narrationState);
+    logger.info(`[Trip ${trip.id}] 📝 Narration mode enabled`);
+  }
 
   // Process each photo
   const photos = [];
@@ -313,12 +329,26 @@ export async function processTrip(req: Request, res: Response): Promise<void> {
 export async function listTrips(req: Request, res: Response): Promise<void> {
   const trips = await tripRepo.findAll();
 
+  // Get first photo for each trip to use as thumbnail
+  const tripsWithThumbnails = await Promise.all(
+    trips.map(async (trip) => {
+      const photos = await photoRepo.findByTrip(trip.id);
+      const firstPhoto = photos.length > 0 ? photos[0] : null;
+      const thumbnailUrl = firstPhoto?.fileUrl || null;
+      
+      return {
+        ...trip,
+        thumbnailUrl,
+      };
+    })
+  );
+
   const response: ApiResponse<{
-    trips: typeof trips;
+    trips: typeof tripsWithThumbnails;
   }> = {
     success: true,
     data: {
-      trips,
+      trips: tripsWithThumbnails,
     },
   };
 
@@ -420,5 +450,162 @@ export async function getTripStatusStream(req: Request, res: Response): Promise<
   });
 
   // Keep connection open - SSE service handles cleanup on disconnect
+}
+
+/**
+ * Delete a trip
+ */
+export async function deleteTrip(req: Request, res: Response): Promise<void> {
+  const { tripId } = req.params;
+
+  // Verify trip exists
+  const trip = await tripRepo.findById(tripId);
+  if (!trip) {
+    throw new AppError('NOT_FOUND', 'Trip not found', 404);
+  }
+
+  logger.info(`[Trip ${tripId}] 🗑️ Deleting trip: "${trip.name}"`);
+
+  // Get all photos for this trip to delete their files
+  const photos = await photoRepo.findByTrip(tripId);
+  logger.info(`[Trip ${tripId}] Found ${photos.length} photo(s) to delete`);
+
+  // Delete photo files from storage
+  for (const photo of photos) {
+    try {
+      if (photo.filePath) {
+        await storageService.delete(photo.filePath);
+        logger.debug(`[Trip ${tripId}] Deleted photo file: ${photo.filePath}`);
+      }
+    } catch (error) {
+      logger.warn(`[Trip ${tripId}] Failed to delete photo file ${photo.filePath}`, error);
+      // Continue deleting other files even if one fails
+    }
+  }
+
+  // Delete trip (CASCADE will delete photos, day itineraries, narration answers from DB)
+  await tripRepo.delete(tripId);
+  logger.info(`[Trip ${tripId}] ✅ Trip deleted successfully`);
+
+  const response: ApiResponse<{ message: string }> = {
+    success: true,
+    data: {
+      message: 'Trip deleted successfully',
+    },
+  };
+
+  res.json(response);
+}
+
+/**
+ * Delete all trips except the specified one
+ */
+export async function deleteAllOtherTrips(req: Request, res: Response): Promise<void> {
+  const { tripId } = req.params;
+
+  // Verify the trip to keep exists
+  const tripToKeep = await tripRepo.findById(tripId);
+  if (!tripToKeep) {
+    throw new AppError('NOT_FOUND', 'Trip not found', 404);
+  }
+
+  // Get all trips except the one to keep
+  const allTrips = await tripRepo.findAll();
+  const tripsToDelete = allTrips.filter((trip) => trip.id !== tripId);
+  
+  if (tripsToDelete.length === 0) {
+    const response: ApiResponse<{ message: string; deletedCount: number }> = {
+      success: true,
+      data: {
+        message: 'No other trips to delete',
+        deletedCount: 0,
+      },
+    };
+    res.json(response);
+    return;
+  }
+
+  logger.info(`🗑️ Deleting ${tripsToDelete.length} trip(s) (keeping trip ${tripId})`);
+
+  // Get all photos for trips to be deleted
+  const photosToDelete: Array<{ tripId: string; photo: Photo }> = [];
+  for (const trip of tripsToDelete) {
+    const photos = await photoRepo.findByTrip(trip.id);
+    photos.forEach((photo) => {
+      photosToDelete.push({ tripId: trip.id, photo });
+    });
+  }
+
+  logger.info(`Found ${photosToDelete.length} photo(s) to delete`);
+
+  // Delete photo files from storage
+  for (const { photo } of photosToDelete) {
+    try {
+      if (photo.filePath) {
+        await storageService.delete(photo.filePath);
+      }
+    } catch (error) {
+      logger.warn(`Failed to delete photo file ${photo.filePath}`, error);
+      // Continue deleting other files even if one fails
+    }
+  }
+
+  // Delete trips (CASCADE will delete photos, day itineraries, narration answers from DB)
+  const tripIdsToDelete = tripsToDelete.map((trip) => trip.id);
+  const deletedCount = await tripRepo.deleteMany(tripIdsToDelete);
+  logger.info(`✅ Deleted ${deletedCount} trip(s) successfully`);
+
+  const response: ApiResponse<{ message: string; deletedCount: number }> = {
+    success: true,
+    data: {
+      message: `Deleted ${deletedCount} trip(s) successfully`,
+      deletedCount,
+    },
+  };
+
+  res.json(response);
+}
+
+/**
+ * Cancel trip processing (mark as failed)
+ */
+export async function cancelTripProcessing(req: Request, res: Response): Promise<void> {
+  const { tripId } = req.params;
+
+  // Verify trip exists
+  const trip = await tripRepo.findById(tripId);
+  if (!trip) {
+    throw new AppError('NOT_FOUND', 'Trip not found', 404);
+  }
+
+  // Only allow canceling if trip is processing or pending
+  if (trip.processingStatus !== ProcessingStatus.PROCESSING && trip.processingStatus !== ProcessingStatus.PENDING) {
+    throw new AppError('VALIDATION_ERROR', 'Trip is not currently processing', 400);
+  }
+
+  logger.info(`[Trip ${tripId}] 🛑 Canceling processing for trip: "${trip.name}"`);
+
+  // Mark trip as failed
+  await tripRepo.updateProcessingStatus(tripId, ProcessingStatus.FAILED);
+
+  // Emit cancellation event via SSE
+  sseService.sendToTrip(tripId, {
+    type: 'status',
+    data: {
+      status: ProcessingStatus.FAILED,
+      message: 'Processing cancelled by user',
+    },
+  });
+
+  logger.info(`[Trip ${tripId}] ✅ Processing cancelled successfully`);
+
+  const response: ApiResponse<{ message: string }> = {
+    success: true,
+    data: {
+      message: 'Processing cancelled successfully',
+    },
+  };
+
+  res.json(response);
 }
 

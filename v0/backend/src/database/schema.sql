@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS trips (
     end_date DATE,
     overview JSONB,
     processing_status VARCHAR(20) DEFAULT 'not_started',
+    narration_state JSONB,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -71,9 +72,28 @@ CREATE INDEX IF NOT EXISTS idx_photos_processing_status ON photos(processing_sta
 CREATE INDEX IF NOT EXISTS idx_day_itineraries_trip_id ON day_itineraries(trip_id);
 CREATE INDEX IF NOT EXISTS idx_trips_processing_status ON trips(processing_status);
 
+-- Narration answers table
+CREATE TABLE IF NOT EXISTS narration_answers (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    trip_id UUID REFERENCES trips(id) ON DELETE CASCADE,
+    photo_id UUID REFERENCES photos(id) ON DELETE CASCADE,
+    day_number INTEGER NOT NULL,
+    question_id VARCHAR(255) NOT NULL,
+    question_text TEXT NOT NULL,
+    answer_text TEXT NOT NULL,
+    answer_audio_url TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Indexes for narration
+CREATE INDEX IF NOT EXISTS idx_narration_answers_trip_id ON narration_answers(trip_id);
+CREATE INDEX IF NOT EXISTS idx_narration_answers_photo_id ON narration_answers(photo_id);
+CREATE INDEX IF NOT EXISTS idx_narration_answers_day_number ON narration_answers(day_number);
+
 -- GIN indexes for JSONB full-text search
 CREATE INDEX IF NOT EXISTS idx_photos_description ON photos USING GIN (description);
 CREATE INDEX IF NOT EXISTS idx_photos_exif_data ON photos USING GIN (exif_data);
 CREATE INDEX IF NOT EXISTS idx_day_summary ON day_itineraries USING GIN (summary);
 CREATE INDEX IF NOT EXISTS idx_trip_overview ON trips USING GIN (overview);
+CREATE INDEX IF NOT EXISTS idx_trip_narration_state ON trips USING GIN (narration_state);
 

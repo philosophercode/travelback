@@ -100,7 +100,11 @@ fi
 # Create uploads directory if it doesn't exist
 mkdir -p uploads
 
+# Note: Database migrations run automatically when the server starts
+# To run migrations manually, use: npm run db:migrate
+
 # Start the application
 echo -e "${GREEN}Starting TravelBack API server...${NC}\n"
+echo -e "${BLUE}Note: Database migrations will run automatically on startup${NC}\n"
 npm run dev
 

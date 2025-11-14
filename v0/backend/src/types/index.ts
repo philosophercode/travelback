@@ -19,6 +19,7 @@ export interface Trip {
   endDate: Date | null;
   overview: TripOverview | null;
   processingStatus: ProcessingStatus;
+  narrationState: NarrationState | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -168,6 +169,7 @@ export interface UpdateTripData {
   endDate?: Date;
   overview?: TripOverview;
   processingStatus?: ProcessingStatus;
+  narrationState?: NarrationState;
 }
 
 /**
@@ -216,4 +218,75 @@ export interface ApiErrorResponse {
  * API Response type
  */
 export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
+
+/**
+ * Narration wizard state
+ */
+export interface NarrationState {
+  enabled: boolean;
+  status: 'not_started' | 'in_progress' | 'completed';
+  currentDayNumber?: number;
+  currentPhotoIndex?: number;
+  completedDays: number[];
+  completedPhotos: string[]; // photo IDs
+}
+
+/**
+ * Narration question for a photo
+ */
+export interface NarrationQuestion {
+  id: string;
+  photoId: string;
+  dayNumber: number;
+  question: string;
+  context: {
+    photoDescription: PhotoDescription;
+    location?: {
+      city?: string;
+      country?: string;
+      landmark?: string;
+    };
+    timeOfDay?: string;
+  };
+  type: 'location' | 'activity' | 'context' | 'emotion' | 'people';
+}
+
+/**
+ * Narration answer
+ */
+export interface NarrationAnswer {
+  questionId: string;
+  photoId: string;
+  dayNumber: number;
+  answer: string; // Transcribed from audio or typed
+  audioUrl?: string;
+  timestamp: Date;
+}
+
+/**
+ * Photo context for narration (what to show user)
+ */
+export interface PhotoNarrationContext {
+  photo: Photo;
+  description: PhotoDescription;
+  location: {
+    city?: string;
+    country?: string;
+    landmark?: string;
+  };
+  summary: string; // Brief summary: "Here's what we detected in this image..."
+}
+
+/**
+ * Create narration answer input
+ */
+export interface CreateNarrationAnswerData {
+  tripId: string;
+  photoId: string;
+  dayNumber: number;
+  questionId: string;
+  questionText: string;
+  answerText: string;
+  answerAudioUrl?: string;
+}
 

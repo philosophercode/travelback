@@ -1,10 +1,11 @@
-import { ProcessingStatus, Photo, LocationData } from '../types';
+import { ProcessingStatus, Photo, LocationData, TripOverview } from '../types';
 import { TripRepository } from '../database/repositories/trip.repository';
 import { PhotoRepository } from '../database/repositories/photo.repository';
 import { ItineraryRepository } from '../database/repositories/itinerary.repository';
 import { ImageDescriptionAgent } from '../agents/image-description.agent';
 import { DayItineraryAgent } from '../agents/day-itinerary.agent';
 import { TripOverviewAgent } from '../agents/trip-overview.agent';
+import { narrationService } from './narration.service';
 import { storageService } from './storage.service';
 import { locationService } from './location.service';
 import { sseService } from './sse.service';
@@ -160,6 +161,20 @@ export class ProcessingService {
           })),
         },
       });
+      
+      // If narration is enabled, start the narration wizard
+      if (completedTrip!.narrationState?.enabled) {
+        logger.info(`[Trip ${tripId}] 📝 Narration enabled, starting narration wizard`);
+        narrationService.startNarration(tripId).catch((error) => {
+          logger.error(`[Trip ${tripId}] ❌ Failed to start narration wizard`, error);
+        });
+        
+        // Emit narration started event
+        sseService.sendToTrip(tripId, {
+          type: 'narration_started',
+          data: { message: 'Narration wizard ready' },
+        });
+      }
       
       logger.info(`[Trip ${tripId}] 🎉 Processing pipeline completed successfully`);
     } catch (error) {
@@ -664,16 +679,16 @@ export class ProcessingService {
 
     logger.info(`[Trip ${tripId}] 🎯 Overview generated in ${overviewDuration}s (title: "${overview.title}")`);
 
-    // Update trip with overview and use overview title as trip name
-    await this.tripRepo.updateOverview(tripId, overview);
-
-    // Update trip dates
+    // Calculate trip dates
     const dates = photos
       .map((p) => p.capturedAt)
       .filter((d): d is Date => d !== null)
       .sort((a, b) => a.getTime() - b.getTime());
 
-    const updates: { startDate?: Date; endDate?: Date; name?: string } = {};
+    // Update trip with overview, dates, and name in a single atomic update
+    const updates: { overview?: TripOverview; startDate?: Date; endDate?: Date; name?: string } = {
+      overview,
+    };
     
     if (dates.length > 0) {
       updates.startDate = dates[0];
@@ -687,9 +702,8 @@ export class ProcessingService {
       logger.info(`[Trip ${tripId}] ✏️  Trip name updated to: "${overview.title}"`);
     }
 
-    if (Object.keys(updates).length > 0) {
-      await this.tripRepo.update(tripId, updates);
-    }
+    // Single atomic update to ensure consistency
+    await this.tripRepo.update(tripId, updates);
 
     logger.info(`[Trip ${tripId}] ✅ Trip overview generated and trip updated`);
   }
