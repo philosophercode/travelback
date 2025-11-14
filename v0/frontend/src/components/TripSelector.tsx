@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import type { Trip } from '../types';
 import { apiClient } from '../api/client';
 
@@ -14,25 +14,76 @@ export function TripSelector({ selectedTripId, onTripSelect }: TripSelectorProps
   const [showIncomplete, setShowIncomplete] = useState(false);
 
   useEffect(() => {
+    let isInitialLoad = true;
+    
     async function loadTrips() {
       try {
-        setLoading(true);
-        setError(null);
+        if (isInitialLoad) {
+          setLoading(true);
+          setError(null);
+        }
+        
         const data = await apiClient.fetchTrips();
-        setTrips(data.trips.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+        const sortedTrips = data.trips.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        
+        // Only update state if trips actually changed
+        setTrips(prevTrips => {
+          // Quick check: if lengths differ, definitely update
+          if (prevTrips.length !== sortedTrips.length) {
+            return sortedTrips;
+          }
+          
+          // Deep comparison: check if any trip changed
+          const hasChanges = sortedTrips.some((newTrip, index) => {
+            const prevTrip = prevTrips[index];
+            if (!prevTrip) return true;
+            
+            // Compare key fields that would indicate a change
+            return (
+              prevTrip.id !== newTrip.id ||
+              prevTrip.processingStatus !== newTrip.processingStatus ||
+              prevTrip.overview?.title !== newTrip.overview?.title ||
+              prevTrip.name !== newTrip.name
+            );
+          });
+          
+          return hasChanges ? sortedTrips : prevTrips;
+        });
+        
+        if (isInitialLoad) {
+          setLoading(false);
+        }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load trips');
-      } finally {
-        setLoading(false);
+        const errorMessage = err instanceof Error ? err.message : 'Failed to load trips';
+        setError(prevError => {
+          if (prevError === errorMessage) return prevError;
+          return errorMessage;
+        });
+        if (isInitialLoad) {
+          setLoading(false);
+        }
       }
+      
+      isInitialLoad = false;
     }
 
     loadTrips();
     
-    // Refresh trips every 5 seconds to catch status updates
-    const interval = setInterval(loadTrips, 5000);
+    // Refresh trips less frequently - every 30 seconds as fallback
+    const interval = setInterval(loadTrips, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  // Memoize filtered trips to avoid recalculating on every render
+  const { completedTripsWithDescriptions, incompleteTrips } = useMemo(() => {
+    const completed = trips.filter(
+      trip => trip.processingStatus === 'completed' && trip.overview !== null
+    );
+    const incomplete = trips.filter(
+      trip => trip.processingStatus !== 'completed' || trip.overview === null
+    );
+    return { completedTripsWithDescriptions: completed, incompleteTrips: incomplete };
+  }, [trips]);
 
   if (loading) {
     return <div className="trip-selector">Loading trips...</div>;
@@ -41,16 +92,6 @@ export function TripSelector({ selectedTripId, onTripSelect }: TripSelectorProps
   if (error) {
     return <div className="trip-selector error">Error: {error}</div>;
   }
-
-  // Filter trips: only completed trips with descriptions (overview) by default
-  const completedTripsWithDescriptions = trips.filter(
-    trip => trip.processingStatus === 'completed' && trip.overview !== null
-  );
-  
-  // Incomplete trips (failed, not_started, or processing)
-  const incompleteTrips = trips.filter(
-    trip => trip.processingStatus !== 'completed' || trip.overview === null
-  );
 
   if (trips.length === 0) {
     return <div className="trip-selector">No trips found. Create a trip first.</div>;

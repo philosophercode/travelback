@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { TripSelector } from './components/TripSelector';
 import { TripOverview } from './components/TripOverview';
 import { DayView } from './components/DayView';
@@ -64,6 +64,11 @@ function App() {
     setSelectedTripId(trip.id);
     setCurrentPage('view');
   };
+
+  // Memoize days array to prevent unnecessary rerenders in child components
+  const stableDays = useMemo(() => {
+    return tripData?.days || [];
+  }, [tripData?.days ? tripData.days.map(d => d.id).join(',') : '']);
 
   useEffect(() => {
     if (!selectedTripId) {
@@ -140,17 +145,17 @@ function App() {
               <p className="trip-stats">
                 {tripData.totalPhotos} photos • {tripData.days.length} days
               </p>
-              {tripData.days.length > 0 && (
+              {stableDays.length > 0 && (
                 <div className="photos-and-map-container">
                   <PhotoThumbnails 
                     tripId={tripData.trip.id} 
-                    days={tripData.days}
+                    days={stableDays}
                     hoveredPhotoId={hoveredPhotoId}
                     onPhotoHover={setHoveredPhotoId}
                   />
                   <TripMap 
                     tripId={tripData.trip.id} 
-                    days={tripData.days}
+                    days={stableDays}
                     onPhotoHover={setHoveredPhotoId}
                     hoveredPhotoId={hoveredPhotoId}
                   />

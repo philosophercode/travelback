@@ -85,14 +85,14 @@ export function PhotoThumbnails({ tripId, days, hoveredPhotoId, onPhotoHover }: 
 
   return (
     <div className="photo-thumbnails">
-      <h3 className="thumbnails-title">Photos by Day</h3>
+      <h3 className="thumbnails-title">Photos</h3>
       <div className="thumbnails-by-day">
         {days.map((day) => {
           const photos = dayPhotos.get(day.dayNumber) || [];
           if (photos.length === 0) return null;
 
           return (
-            <div key={day.id} className="day-thumbnails">
+            <div key={day.id} id={`day-${day.dayNumber}`} className="day-thumbnails">
               <h4 
                 className="day-thumbnails-title clickable"
                 onClick={() => scrollToDay(day.dayNumber)}
@@ -107,6 +107,7 @@ export function PhotoThumbnails({ tripId, days, hoveredPhotoId, onPhotoHover }: 
                   return (
                     <div 
                       key={photo.id} 
+                      id={`photo-${photo.id}`}
                       className={`thumbnail ${isHovered ? 'thumbnail-hovered' : ''}`}
                       onClick={() => scrollToPhoto(photo.id)}
                       onMouseEnter={() => {
