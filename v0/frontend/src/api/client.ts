@@ -64,8 +64,7 @@ export function resolveMediaUrl(fileUrl?: string | null): string | null {
 
 async function uploadTripWithPhotos(
   photos: File[],
-  name?: string,
-  enableNarration?: boolean
+  name?: string
 ): Promise<{ trip: Trip; uploadedCount: number; photos: Photo[] }> {
   const url = withBase('/api/trips/upload');
   const formData = new FormData();
@@ -78,11 +77,6 @@ async function uploadTripWithPhotos(
   // Add optional trip name
   if (name && name.trim()) {
     formData.append('name', name.trim());
-  }
-
-  // Add narration flag if enabled
-  if (enableNarration) {
-    formData.append('enableNarration', 'true');
   }
 
   let response: Response;
@@ -131,6 +125,120 @@ async function cancelTripProcessing(tripId: string): Promise<{ message: string }
   });
 }
 
+async function startNarration(tripId: string): Promise<{ state: any }> {
+  return request<{ state: any }>(`/api/trips/${tripId}/narration/start`, {
+    method: 'POST',
+  });
+}
+
+async function getNarrationState(tripId: string): Promise<{ state: any }> {
+  return request<{ state: any }>(`/api/trips/${tripId}/narration/state`);
+}
+
+async function getPhotoContext(tripId: string, photoId: string): Promise<{ context: any }> {
+  return request<{ context: any }>(`/api/trips/${tripId}/narration/photos/${photoId}/context`);
+}
+
+async function getPhotoQuestions(tripId: string, photoId: string): Promise<{ questions: any[] }> {
+  return request<{ questions: any[] }>(`/api/trips/${tripId}/narration/photos/${photoId}/questions`);
+}
+
+async function submitNarrationAnswer(
+  tripId: string,
+  answer: {
+    questionId: string;
+    questionText: string;
+    photoId: string;
+    dayNumber: number;
+    answer: string;
+    audioUrl?: string;
+  }
+): Promise<{ message: string }> {
+  return request<{ message: string }>(`/api/trips/${tripId}/narration/answer`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(answer),
+  });
+}
+
+async function completeNarration(tripId: string): Promise<{ message: string }> {
+  return request<{ message: string }>(`/api/trips/${tripId}/narration/complete`, {
+    method: 'POST',
+  });
+}
+
+/**
+ * Connect to trip status SSE stream
+ * Returns an EventSource and a cleanup function
+ */
+function connectToTripStatusStream(
+  tripId: string,
+  onEvent: (event: { type: string; data: unknown }) => void
+): () => void {
+  const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') || 'http://localhost:3000';
+  const url = `${apiBase}/api/trips/${tripId}/status`;
+  
+  const eventSource = new EventSource(url);
+  
+  eventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      onEvent({ type: 'message', data });
+    } catch (error) {
+      console.error('Failed to parse SSE message:', error);
+    }
+  };
+  
+  // Handle custom event types
+  eventSource.addEventListener('status', (event: MessageEvent) => {
+    try {
+      const data = JSON.parse(event.data);
+      onEvent({ type: 'status', data });
+    } catch (error) {
+      console.error('Failed to parse SSE status event:', error);
+    }
+  });
+  
+  eventSource.addEventListener('progress', (event: MessageEvent) => {
+    try {
+      const data = JSON.parse(event.data);
+      onEvent({ type: 'progress', data });
+    } catch (error) {
+      console.error('Failed to parse SSE progress event:', error);
+    }
+  });
+  
+  eventSource.addEventListener('summary', (event: MessageEvent) => {
+    try {
+      const data = JSON.parse(event.data);
+      onEvent({ type: 'summary', data });
+    } catch (error) {
+      console.error('Failed to parse SSE summary event:', error);
+    }
+  });
+  
+  eventSource.addEventListener('connected', (event: MessageEvent) => {
+    try {
+      const data = JSON.parse(event.data);
+      onEvent({ type: 'connected', data });
+    } catch (error) {
+      console.error('Failed to parse SSE connected event:', error);
+    }
+  });
+  
+  eventSource.onerror = (error) => {
+    console.error('SSE connection error:', error);
+    onEvent({ type: 'error', data: { error: 'Connection error' } });
+  };
+  
+  // Return cleanup function
+  return () => {
+    eventSource.close();
+  };
+}
+
 export const apiClient = {
   fetchTrips,
   fetchTrip,
@@ -140,5 +248,12 @@ export const apiClient = {
   deleteTrip,
   deleteAllOtherTrips,
   cancelTripProcessing,
+  startNarration,
+  getNarrationState,
+  getPhotoContext,
+  getPhotoQuestions,
+  submitNarrationAnswer,
+  completeNarration,
+  connectToTripStatusStream,
 };
 

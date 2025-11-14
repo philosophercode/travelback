@@ -7,7 +7,8 @@ import { PhotoThumbnails } from './components/PhotoThumbnails';
 import { TripMap } from './components/TripMap';
 import { UploadPage } from './components/UploadPage';
 import { ProcessingPage } from './components/ProcessingPage';
-import type { TripResponse, Trip } from './types';
+import { NarrationWizard } from './components/NarrationWizard';
+import type { TripResponse, Trip, ProcessingProgress } from './types';
 import { apiClient } from './api/client';
 import './App.css';
 
@@ -32,6 +33,8 @@ function App() {
   const [processingTripsCount, setProcessingTripsCount] = useState(0);
   const [deletingTrip, setDeletingTrip] = useState(false);
   const [cancellingTrip, setCancellingTrip] = useState(false);
+  const [showNarrationWizard, setShowNarrationWizard] = useState(false);
+  const [processingProgress, setProcessingProgress] = useState<ProcessingProgress | null>(null);
 
   // Update URL when tripId or page changes
   useEffect(() => {
@@ -145,6 +148,7 @@ function App() {
   useEffect(() => {
     if (!selectedTripId) {
       setTripData(null);
+      setProcessingProgress(null);
       return;
     }
 
@@ -164,6 +168,39 @@ function App() {
 
     loadTrip();
   }, [selectedTripId]);
+
+  // Connect to SSE stream for processing trips
+  useEffect(() => {
+    if (!selectedTripId || !tripData) {
+      return;
+    }
+
+    const isProcessing = tripData.trip.processingStatus === 'processing' || tripData.trip.processingStatus === 'pending';
+    if (!isProcessing) {
+      setProcessingProgress(null);
+      return;
+    }
+
+    // Connect to SSE stream
+    const cleanup = apiClient.connectToTripStatusStream(selectedTripId, (event) => {
+      if (event.type === 'progress') {
+        setProcessingProgress(event.data as ProcessingProgress);
+      } else if (event.type === 'status') {
+        const statusData = event.data as { status: string; message?: string };
+        // Reload trip data when status changes
+        if (statusData.status === 'completed' || statusData.status === 'failed') {
+          apiClient.fetchTrip(selectedTripId).then(setTripData).catch(console.error);
+          setProcessingProgress(null);
+        }
+      } else if (event.type === 'summary') {
+        // Reload trip data when summary is received (processing complete)
+        apiClient.fetchTrip(selectedTripId).then(setTripData).catch(console.error);
+        setProcessingProgress(null);
+      }
+    });
+
+    return cleanup;
+  }, [selectedTripId, tripData?.trip.processingStatus]);
 
   return (
     <div className="app">
@@ -234,6 +271,32 @@ function App() {
                   <p className="trip-status">
                     Status: <strong>{tripData.trip.processingStatus}</strong>
                   </p>
+                  {processingProgress && (
+                    <div className="processing-progress">
+                      <div className="progress-step">
+                        <span className="progress-step-label">
+                          {processingProgress.step === 'photos' && '📸 Photos'}
+                          {processingProgress.step === 'clustering' && '📅 Clustering'}
+                          {processingProgress.step === 'itineraries' && '📝 Days'}
+                          {processingProgress.step === 'overview' && '🎯 Overview'}
+                        </span>
+                        <span className="progress-message">{processingProgress.message}</span>
+                        {processingProgress.total !== undefined && processingProgress.completed !== undefined && (
+                          <div className="progress-bar-container">
+                            <div 
+                              className="progress-bar" 
+                              style={{ 
+                                width: `${(processingProgress.completed / processingProgress.total) * 100}%` 
+                              }}
+                            />
+                            <span className="progress-count">
+                              {processingProgress.completed} / {processingProgress.total}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                   <p className="trip-stats">
                     {tripData.totalPhotos} photos • {tripData.days.length} days
                   </p>
@@ -249,14 +312,35 @@ function App() {
                       {cancellingTrip ? 'Cancelling...' : '✕ Cancel'}
                     </button>
                   ) : (
-                    <button
-                      className="trip-delete-button"
-                      onClick={handleDeleteTrip}
-                      disabled={deletingTrip}
-                      title="Delete trip"
-                    >
-                      {deletingTrip ? 'Deleting...' : '🗑️ Delete'}
-                    </button>
+                    <>
+                      {tripData.trip.processingStatus === 'completed' && (
+                        <button
+                          className="trip-enhance-button"
+                          onClick={() => setShowNarrationWizard(true)}
+                          title={
+                            !tripData.trip.narrationState || tripData.trip.narrationState.status === 'not_started'
+                              ? 'Create personalized trip itinerary'
+                              : tripData.trip.narrationState.status === 'in_progress'
+                              ? 'Continue trip itinerary'
+                              : 'Restart trip itinerary'
+                          }
+                        >
+                          {!tripData.trip.narrationState || tripData.trip.narrationState.status === 'not_started'
+                            ? '✨ Trip Itinerary Narration'
+                            : tripData.trip.narrationState.status === 'in_progress'
+                            ? '🎙️ Trip Talk'
+                            : '✨ Restart Itinerary'}
+                        </button>
+                      )}
+                      <button
+                        className="trip-delete-button"
+                        onClick={handleDeleteTrip}
+                        disabled={deletingTrip}
+                        title="Delete trip"
+                      >
+                        {deletingTrip ? 'Deleting...' : '🗑️ Delete'}
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -305,6 +389,28 @@ function App() {
           <TripCards onTripSelect={setSelectedTripId} />
         )}
           </>
+        )}
+
+        {showNarrationWizard && selectedTripId && tripData && (
+          <NarrationWizard
+            tripId={selectedTripId}
+            tripData={tripData}
+            onClose={() => {
+              setShowNarrationWizard(false);
+              // Reload trip data to get updated narration state
+              if (selectedTripId) {
+                apiClient.fetchTrip(selectedTripId).then(setTripData).catch(console.error);
+              }
+            }}
+            onComplete={async () => {
+              setShowNarrationWizard(false);
+              // Reload trip data to get updated narration state and personalized content
+              if (selectedTripId) {
+                const updatedData = await apiClient.fetchTrip(selectedTripId);
+                setTripData(updatedData);
+              }
+            }}
+          />
         )}
       </main>
     </div>

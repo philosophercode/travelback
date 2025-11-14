@@ -56,12 +56,6 @@ router.post('/:tripId/photos', uploadMiddleware, asyncHandler(uploadPhotos));
 router.post('/:tripId/process', asyncHandler(processTrip));
 
 /**
- * GET /api/trips/:id
- * Get trip details with overview and days
- */
-router.get('/:tripId', asyncHandler(getTrip));
-
-/**
  * GET /api/trips/:id/days/:dayNumber
  * Get specific day itinerary with photos
  */
@@ -114,6 +108,13 @@ router.post('/:tripId/narration/complete', asyncHandler(completeNarration));
  * Cancel trip processing
  */
 router.post('/:tripId/cancel', asyncHandler(cancelTripProcessing));
+
+/**
+ * GET /api/trips/:id
+ * Get trip details with overview and days
+ * NOTE: This must come AFTER all more specific routes to avoid route conflicts
+ */
+router.get('/:tripId', asyncHandler(getTrip));
 
 /**
  * DELETE /api/trips/:id/others

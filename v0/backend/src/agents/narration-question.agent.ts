@@ -54,28 +54,92 @@ Return ONLY a valid JSON array (no markdown, no code blocks):
 
 Make questions conversational, specific to what's visible, and designed to elicit personal stories. Return only the JSON array, nothing else.`;
 
-      const response = await this.llmProvider.generateText(
-        [
-          {
-            role: 'system',
-            content: 'You are a travel storyteller who asks insightful questions to help people narrate their travel experiences.',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        {
-          jsonMode: true,
-          maxTokens: 2000,
-        }
-      );
+      let questions: Array<{ id: string; question: string; type: string }> | null = null;
+      let maxTokens = 4000; // Start with higher token limit
+      let retries = 0;
+      const maxRetries = 2;
 
-      const questions = JSON.parse(response.content) as Array<{
-        id: string;
-        question: string;
-        type: string;
-      }>;
+      while (retries <= maxRetries && !questions) {
+        try {
+          const response = await this.llmProvider.generateText(
+            [
+              {
+                role: 'system',
+                content: 'You are a travel storyteller who asks insightful questions to help people narrate their travel experiences.',
+              },
+              {
+                role: 'user',
+                content: prompt,
+              },
+            ],
+            {
+              jsonMode: true,
+              maxTokens: maxTokens,
+            }
+          );
+
+          // Try to parse the response
+          const content = response.content.trim();
+          
+          // Handle truncated JSON - try to extract valid JSON array
+          let jsonContent = content;
+          if (!content.startsWith('[')) {
+            // Find the first '[' if JSON was prefixed with text
+            const arrayStart = content.indexOf('[');
+            if (arrayStart !== -1) {
+              jsonContent = content.substring(arrayStart);
+            }
+          }
+          
+          // Try to close incomplete JSON arrays
+          if (jsonContent.endsWith(',') || !jsonContent.endsWith(']')) {
+            // Count open brackets
+            const openBrackets = (jsonContent.match(/\[/g) || []).length;
+            const closeBrackets = (jsonContent.match(/\]/g) || []).length;
+            const missingBrackets = openBrackets - closeBrackets;
+            
+            // Remove trailing comma and add closing brackets
+            jsonContent = jsonContent.replace(/,\s*$/, '');
+            jsonContent += ']'.repeat(missingBrackets);
+          }
+
+          questions = JSON.parse(jsonContent) as Array<{
+            id: string;
+            question: string;
+            type: string;
+          }>;
+
+          // Successfully parsed, break out of retry loop
+          break;
+        } catch (error) {
+          // If it's a token limit error and we haven't exceeded retries, increase tokens and retry
+          if (error instanceof Error && error.message.includes('truncated') && retries < maxRetries) {
+            maxTokens = Math.min(maxTokens * 1.5, 8000); // Increase tokens, cap at 8000
+            retries++;
+            logger.warn(`Question generation truncated, retrying with ${maxTokens} tokens (attempt ${retries + 1}/${maxRetries + 1})`);
+            continue;
+          }
+          
+          // If it's a JSON parse error but we got a response, try to extract partial questions
+          if (error instanceof SyntaxError) {
+            logger.warn('Failed to parse JSON response, attempting to extract partial questions', error);
+            // This shouldn't happen since we're in the catch block, but if we somehow have access to response
+            // we could try to extract partial data. For now, just retry with more tokens.
+          }
+          
+          // If we've exhausted retries, throw the error
+          if (retries >= maxRetries) {
+            throw error;
+          }
+          
+          // Increment retries and continue
+          retries++;
+        }
+      }
+
+      if (!questions || questions.length === 0) {
+        throw new Error('Failed to generate questions after retries');
+      }
 
       // Map to NarrationQuestion format
       const narrationQuestions: NarrationQuestion[] = questions.map((q, index) => ({

@@ -9,7 +9,7 @@ import { processingService } from '../services/processing.service';
 import { sseService } from '../services/sse.service';
 import { narrationService } from '../services/narration.service';
 import { AppError } from '../middleware/error-handler';
-import { ApiResponse, CreateTripData, NarrationState, Photo, ProcessingStatus } from '../types';
+import { ApiResponse, CreateTripData, Photo, ProcessingStatus } from '../types';
 import { logger } from '../utils/logger';
 
 const tripRepo = new TripRepository();
@@ -57,7 +57,7 @@ export async function createTrip(req: Request, res: Response): Promise<void> {
  */
 export async function createTripWithPhotos(req: Request, res: Response): Promise<void> {
   const uploadStartTime = Date.now();
-  const { name, startDate, enableNarration } = req.body;
+  const { name, startDate } = req.body;
   const files = req.files as Express.Multer.File[];
 
   if (!files || files.length === 0) {
@@ -71,9 +71,6 @@ export async function createTripWithPhotos(req: Request, res: Response): Promise
     ? name.trim()
     : generateDefaultTripName();
 
-  // Parse narration flag (can be string "true"/"false" from form data or boolean)
-  const narrationEnabled = enableNarration === 'true' || enableNarration === true;
-
   // Create trip
   const tripData: CreateTripData = {
     name: tripName,
@@ -82,18 +79,6 @@ export async function createTripWithPhotos(req: Request, res: Response): Promise
 
   const trip = await tripRepo.create(tripData);
   logger.info(`[Trip ${trip.id}] ✅ Trip created: "${tripName}"`);
-
-  // Set narration state if enabled
-  if (narrationEnabled) {
-    const narrationState: NarrationState = {
-      enabled: true,
-      status: 'not_started',
-      completedDays: [],
-      completedPhotos: [],
-    };
-    await tripRepo.updateNarrationState(trip.id, narrationState);
-    logger.info(`[Trip ${trip.id}] 📝 Narration mode enabled`);
-  }
 
   // Process each photo
   const photos = [];

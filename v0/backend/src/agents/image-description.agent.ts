@@ -174,31 +174,90 @@ If you cannot identify the location with reasonable confidence (confidence < 0.3
 
 Be specific and accurate. Only include information you can clearly see or infer from the image. Return only the JSON object, nothing else.`;
 
-      const response = await this.llmProvider.generateVisionText(image, prompt, {
-        jsonMode: false,
-        maxTokens: 1000,
-      });
-
-      // Parse JSON, handling potential markdown code blocks
-      let content = response.content.trim();
-      if (content.startsWith('```')) {
-        const lines = content.split('\n');
-        const firstLine = lines[0];
-        if (firstLine.includes('json') || firstLine.includes('JSON')) {
-          content = lines.slice(1, -1).join('\n');
-        } else {
-          content = lines.slice(1, -1).join('\n');
-        }
-      }
-
-      const visualLocation = JSON.parse(content) as {
+      let visualLocation: {
         country?: string | null;
         city?: string | null;
         neighborhood?: string | null;
         landmark?: string | null;
         fullAddress?: string | null;
         confidence?: number;
-      };
+      } | null = null;
+      
+      let maxTokens = 2000; // Start with higher token limit
+      let retries = 0;
+      const maxRetries = 2;
+
+      while (retries <= maxRetries && !visualLocation) {
+        try {
+          const response = await this.llmProvider.generateVisionText(image, prompt, {
+            jsonMode: false,
+            maxTokens: maxTokens,
+          });
+
+          // Parse JSON, handling potential markdown code blocks
+          let content = response.content.trim();
+          if (content.startsWith('```')) {
+            const lines = content.split('\n');
+            const firstLine = lines[0];
+            if (firstLine.includes('json') || firstLine.includes('JSON')) {
+              content = lines.slice(1, -1).join('\n');
+            } else {
+              content = lines.slice(1, -1).join('\n');
+            }
+          }
+
+          // Try to extract JSON if response was truncated
+          if (!content.startsWith('{')) {
+            const jsonStart = content.indexOf('{');
+            if (jsonStart !== -1) {
+              content = content.substring(jsonStart);
+            }
+          }
+
+          // Try to close incomplete JSON objects
+          if (content.endsWith(',') || !content.endsWith('}')) {
+            const openBraces = (content.match(/\{/g) || []).length;
+            const closeBraces = (content.match(/\}/g) || []).length;
+            const missingBraces = openBraces - closeBraces;
+            
+            // Remove trailing comma and add closing braces
+            content = content.replace(/,\s*$/, '');
+            content += '}'.repeat(missingBraces);
+          }
+
+          visualLocation = JSON.parse(content) as {
+            country?: string | null;
+            city?: string | null;
+            neighborhood?: string | null;
+            landmark?: string | null;
+            fullAddress?: string | null;
+            confidence?: number;
+          };
+
+          // Successfully parsed, break out of retry loop
+          break;
+        } catch (error) {
+          // If it's a token limit error and we haven't exceeded retries, increase tokens and retry
+          if (error instanceof Error && error.message.includes('truncated') && retries < maxRetries) {
+            maxTokens = Math.min(maxTokens * 1.5, 4000); // Increase tokens, cap at 4000
+            retries++;
+            logger.warn(`Vision location detection truncated, retrying with ${maxTokens} tokens (attempt ${retries + 1}/${maxRetries + 1})`);
+            continue;
+          }
+          
+          // If we've exhausted retries, throw the error
+          if (retries >= maxRetries) {
+            throw error;
+          }
+          
+          // Increment retries and continue
+          retries++;
+        }
+      }
+
+      if (!visualLocation) {
+        throw new Error('Failed to detect location from image after retries');
+      }
 
       // If confidence is too low or no location identified, return null
       if (
