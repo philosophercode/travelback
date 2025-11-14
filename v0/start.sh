@@ -272,21 +272,66 @@ create_env_file() {
     fi
 }
 
-# Cleanup function
+# Cleanup function for graceful shutdown
 cleanup() {
-    echo -e "\n${YELLOW}Shutting down services...${NC}"
+    echo -e "\n${YELLOW}Shutting down services gracefully...${NC}"
     
-    # Kill background processes
+    # Gracefully stop backend server
     if [ ! -z "$BACKEND_PID" ]; then
-        kill $BACKEND_PID 2>/dev/null || true
-    fi
-    if [ ! -z "$FRONTEND_PID" ]; then
-        kill $FRONTEND_PID 2>/dev/null || true
+        if kill -0 $BACKEND_PID 2>/dev/null; then
+            echo -e "${YELLOW}Stopping backend server (PID $BACKEND_PID)...${NC}"
+            kill -TERM $BACKEND_PID 2>/dev/null || true
+            
+            # Wait up to 5 seconds for graceful shutdown
+            local count=0
+            while kill -0 $BACKEND_PID 2>/dev/null && [ $count -lt 5 ]; do
+                sleep 1
+                count=$((count + 1))
+            done
+            
+            # Force kill if still running
+            if kill -0 $BACKEND_PID 2>/dev/null; then
+                echo -e "${YELLOW}Backend didn't stop gracefully, forcing shutdown...${NC}"
+                kill -KILL $BACKEND_PID 2>/dev/null || true
+            else
+                echo -e "${GREEN}✅ Backend stopped gracefully${NC}"
+            fi
+        fi
     fi
     
-    # Wait for processes to exit
-    wait $BACKEND_PID 2>/dev/null || true
-    wait $FRONTEND_PID 2>/dev/null || true
+    # Gracefully stop frontend server
+    if [ ! -z "$FRONTEND_PID" ]; then
+        if kill -0 $FRONTEND_PID 2>/dev/null; then
+            echo -e "${YELLOW}Stopping frontend server (PID $FRONTEND_PID)...${NC}"
+            kill -TERM $FRONTEND_PID 2>/dev/null || true
+            
+            # Wait up to 5 seconds for graceful shutdown
+            local count=0
+            while kill -0 $FRONTEND_PID 2>/dev/null && [ $count -lt 5 ]; do
+                sleep 1
+                count=$((count + 1))
+            done
+            
+            # Force kill if still running
+            if kill -0 $FRONTEND_PID 2>/dev/null; then
+                echo -e "${YELLOW}Frontend didn't stop gracefully, forcing shutdown...${NC}"
+                kill -KILL $FRONTEND_PID 2>/dev/null || true
+            else
+                echo -e "${GREEN}✅ Frontend stopped gracefully${NC}"
+            fi
+        fi
+    fi
+    
+    # Stop PostgreSQL container gracefully
+    if docker ps --format '{{.Names}}' | grep -q "^travelback-postgres$"; then
+        if [ "$STOP_DB_ON_EXIT" = "true" ]; then
+            echo -e "${YELLOW}Stopping PostgreSQL container (started by this script)...${NC}"
+        else
+            echo -e "${YELLOW}Stopping PostgreSQL container (was already running)...${NC}"
+        fi
+        docker stop travelback-postgres >/dev/null 2>&1 || true
+        echo -e "${GREEN}✅ PostgreSQL container stopped${NC}"
+    fi
     
     echo -e "${GREEN}✅ All services stopped${NC}"
     exit 0
@@ -336,6 +381,9 @@ echo -e "${GREEN}✅ curl is available${NC}\n"
 echo -e "${CYAN}📦 Starting PostgreSQL database...${NC}"
 cd "$BACKEND_DIR"
 
+# Track if we should stop the DB container on exit
+STOP_DB_ON_EXIT="false"
+
 # Check if PostgreSQL container exists (running or stopped)
 if docker ps -a --format '{{.Names}}' | grep -q "^travelback-postgres$"; then
     CONTAINER_EXISTS="true"
@@ -357,6 +405,8 @@ fi
 
 if [ "$CONTAINER_RUNNING" = "true" ]; then
     echo -e "${GREEN}✅ PostgreSQL container is already running${NC}"
+    # Don't stop it on exit since it was already running
+    STOP_DB_ON_EXIT="false"
 elif [ "$CONTAINER_EXISTS" = "true" ]; then
     echo -e "${YELLOW}PostgreSQL container exists but is stopped. Starting it...${NC}"
     if ! docker start travelback-postgres 2>/dev/null; then
@@ -365,9 +415,13 @@ elif [ "$CONTAINER_EXISTS" = "true" ]; then
         echo -e "${YELLOW}Retrying container start...${NC}"
         docker start travelback-postgres
     fi
+    # We started it, so stop it on exit
+    STOP_DB_ON_EXIT="true"
 else
     echo -e "${YELLOW}Creating PostgreSQL container...${NC}"
     docker-compose up -d postgres
+    # We created it, so stop it on exit
+    STOP_DB_ON_EXIT="true"
 fi
 
 # Wait for PostgreSQL to be ready
