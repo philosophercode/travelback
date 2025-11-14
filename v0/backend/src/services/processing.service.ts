@@ -10,6 +10,7 @@ import { locationService } from './location.service';
 import { sseService } from './sse.service';
 import { logger } from '../utils/logger';
 import { config } from '../config';
+import { resizeImageForProcessing } from '../utils/image.utils';
 
 export class ProcessingService {
   private tripRepo: TripRepository;
@@ -417,13 +418,22 @@ export class ProcessingService {
       // Update status
       await this.photoRepo.updateProcessingStatus(photo.id, ProcessingStatus.PROCESSING);
 
-      // Load image file
-      const imageBuffer = storageService.readFile(photo.filePath);
+      // Load original image file (keep original intact)
+      const originalImageBuffer = storageService.readFile(photo.filePath);
 
-      // Generate description
+      // Resize image for AI processing (reduces API costs and improves speed)
+      // Original file remains untouched on disk
+      logger.debug(`[Trip ${tripId}] 📷 Photo ${photo.id}: Resizing image for AI processing...`);
+      const resizedImageBuffer = await resizeImageForProcessing(originalImageBuffer, {
+        maxWidth: config.processing.imageResize.maxWidth,
+        maxHeight: config.processing.imageResize.maxHeight,
+        quality: config.processing.imageResize.quality,
+      });
+
+      // Generate description using resized image
       logger.debug(`[Trip ${tripId}] 📷 Photo ${photo.id}: Generating AI description...`);
       const description = await this.imageDescriptionAgent.describePhoto(
-        imageBuffer,
+        resizedImageBuffer,
         photo.exifData
       );
 
@@ -454,12 +464,12 @@ export class ProcessingService {
         }
       }
 
-      // Try visual location detection
+      // Try visual location detection using resized image
       let visualLocation: LocationData | null = null;
       try {
         logger.debug(`[Trip ${tripId}] 📷 Photo ${photo.id}: Detecting location from image...`);
         visualLocation = await this.imageDescriptionAgent.detectLocationFromImage(
-          imageBuffer,
+          resizedImageBuffer,
           photo.exifData
         );
         if (visualLocation) {
@@ -532,18 +542,20 @@ export class ProcessingService {
 
     logger.info(`[Trip ${tripId}] 📅 Found ${sortedDates.length} unique day(s): ${sortedDates.join(', ')}`);
 
-    // Assign day numbers
-    sortedDates.forEach((dateKey, index) => {
+    // Assign day numbers - await all updates to ensure they complete before next step
+    for (const [index, dateKey] of sortedDates.entries()) {
       const dayNumber = index + 1;
       const dayPhotos = photosByDate.get(dateKey)!;
 
       logger.info(`[Trip ${tripId}] 📅 Day ${dayNumber}: ${dayPhotos.length} photos from ${dateKey}`);
 
-      // Update day number for all photos in this day
-      dayPhotos.forEach((photo) => {
-        this.photoRepo.updateDayNumber(photo.id, dayNumber);
-      });
-    });
+      // Update day number for all photos in this day - await all updates
+      await Promise.all(
+        dayPhotos.map((photo) => 
+          this.photoRepo.updateDayNumber(photo.id, dayNumber)
+        )
+      );
+    }
 
     logger.info(`[Trip ${tripId}] ✅ Clustered photos into ${sortedDates.length} day(s)`);
   }

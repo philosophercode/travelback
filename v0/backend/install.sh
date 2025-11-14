@@ -77,15 +77,8 @@ fi
 # Create .env file if it doesn't exist
 ENV_FILE=".env"
 if [ -f "$ENV_FILE" ]; then
-    echo -e "${YELLOW}.env file already exists.${NC}"
-    read -p "Do you want to overwrite it? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo -e "${BLUE}Skipping .env file creation${NC}\n"
-    else
-        rm "$ENV_FILE"
-        CREATE_ENV=true
-    fi
+    echo -e "${YELLOW}.env file already exists. Skipping creation to preserve existing configuration.${NC}\n"
+    CREATE_ENV=false
 else
     CREATE_ENV=true
 fi
@@ -128,6 +121,11 @@ MAX_FILE_SIZE_MB=10
 
 # Processing
 MAX_CONCURRENT_PHOTOS=3
+
+# Image Resize (for AI processing - originals are kept intact)
+IMAGE_RESIZE_MAX_WIDTH=2048
+IMAGE_RESIZE_MAX_HEIGHT=2048
+IMAGE_RESIZE_QUALITY=85
 EOF
     
     echo -e "${GREEN}✅ .env file created${NC}\n"

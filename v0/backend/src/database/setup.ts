@@ -1,7 +1,6 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
-import { getPool, testConnection } from './db';
+import { testConnection } from './db';
 import { logger } from '../utils/logger';
+import { runMigrations } from './migrations/runner';
 
 async function setupDatabase(): Promise<void> {
   try {
@@ -13,14 +12,10 @@ async function setupDatabase(): Promise<void> {
       throw new Error('Failed to connect to database');
     }
 
-    // Read and execute schema
-    const schemaPath = join(__dirname, 'schema.sql');
-    const schema = readFileSync(schemaPath, 'utf-8');
+    // Run migrations (which will create schema if needed)
+    await runMigrations();
 
-    const pool = getPool();
-    await pool.query(schema);
-
-    logger.info('Database schema created successfully');
+    logger.info('Database setup completed successfully');
     process.exit(0);
   } catch (error) {
     logger.error('Database setup failed', error);
