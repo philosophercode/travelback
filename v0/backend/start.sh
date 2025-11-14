@@ -100,7 +100,45 @@ fi
 # Create uploads directory if it doesn't exist
 mkdir -p uploads
 
+# Get port from .env or default to 3000
+if [ -f ".env" ]; then
+    # Try to read PORT from .env file
+    PORT=$(grep -E "^PORT=" .env | cut -d '=' -f2 | tr -d '"' | tr -d "'" || echo "3000")
+    # Remove any whitespace
+    PORT=$(echo "$PORT" | xargs)
+fi
+PORT=${PORT:-3000}
+
+# Check if port is already in use
+if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null 2>&1 ; then
+    PID=$(lsof -Pi :$PORT -sTCP:LISTEN -t)
+    echo -e "${YELLOW}⚠️  Port $PORT is already in use (PID: $PID)${NC}"
+    echo -e "${YELLOW}Would you like to kill the process and continue? (y/n)${NC}"
+    read -r response
+    if [[ "$response" =~ ^[Yy]$ ]]; then
+        echo -e "${YELLOW}Killing process $PID...${NC}"
+        kill -9 $PID 2>/dev/null || true
+        sleep 1
+        echo -e "${GREEN}✅ Process killed${NC}\n"
+    else
+        echo -e "${RED}❌ Cannot start server. Port $PORT is in use.${NC}"
+        echo -e "${YELLOW}Please stop the process using port $PORT or change the PORT in your .env file.${NC}"
+        exit 1
+    fi
+fi
+
 # Start the application
 echo -e "${GREEN}Starting TravelBack API server...${NC}\n"
+
+# Display server URLs
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}✅ Server URLs:${NC}"
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "  ${YELLOW}Frontend UI:${NC}     http://localhost:5173"
+echo -e "  ${YELLOW}API Base:${NC}        http://localhost:$PORT/api/trips"
+echo -e "  ${YELLOW}Health Check:${NC}    http://localhost:$PORT/health"
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
 npm run dev
 

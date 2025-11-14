@@ -20,6 +20,16 @@ async function startServer(): Promise<void> {
       logger.info(`Health check: http://localhost:${config.port}/health`);
     });
 
+    // Handle server errors (e.g., port already in use)
+    server.on('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EADDRINUSE') {
+        logger.error(`Port ${config.port} is already in use. Please stop the process using this port or change the PORT in your .env file.`);
+      } else {
+        logger.error('Server error:', error);
+      }
+      process.exit(1);
+    });
+
     return server;
   } catch (error) {
     logger.error('Failed to start server', error);
