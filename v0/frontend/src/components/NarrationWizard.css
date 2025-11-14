@@ -1,0 +1,301 @@
+.narration-wizard {
+  background: white;
+  border-radius: 12px;
+  max-width: 1200px;
+  width: 100%;
+  margin: 2rem auto;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e0e0e0;
+}
+
+.wizard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.wizard-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: #333;
+}
+
+.wizard-close-button {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #666;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.wizard-close-button:hover {
+  background-color: #f0f0f0;
+}
+
+.wizard-progress {
+  padding: 1rem 1.5rem;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background-color: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4a90e2, #357abd);
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #666;
+}
+
+.wizard-content {
+  display: flex;
+  flex: 1;
+  gap: 2rem;
+  padding: 1.5rem;
+  overflow-y: auto;
+}
+
+.wizard-photo-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.wizard-photo {
+  width: 100%;
+  max-height: 400px;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.photo-context {
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+}
+
+.photo-context h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  color: #333;
+}
+
+.photo-context p {
+  margin: 0.5rem 0;
+  font-size: 0.875rem;
+  color: #666;
+  line-height: 1.5;
+}
+
+.photo-location {
+  color: #4a90e2 !important;
+  font-weight: 500;
+}
+
+.wizard-question-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.wizard-question-section h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #333;
+}
+
+.question-text {
+  font-size: 1.125rem;
+  color: #333;
+  font-weight: 500;
+  margin: 0;
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  border-left: 4px solid #4a90e2;
+}
+
+.answer-input {
+  flex: 1;
+}
+
+.answer-textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-family: inherit;
+  resize: vertical;
+  transition: border-color 0.2s;
+}
+
+.answer-textarea:focus {
+  outline: none;
+  border-color: #4a90e2;
+}
+
+.wizard-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.wizard-button {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.wizard-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.wizard-button-primary {
+  background-color: #4a90e2;
+  color: white;
+}
+
+.wizard-button-primary:hover:not(:disabled) {
+  background-color: #357abd;
+}
+
+.wizard-button-secondary {
+  background-color: #f0f0f0;
+  color: #333;
+}
+
+.wizard-button-secondary:hover {
+  background-color: #e0e0e0;
+}
+
+.error-message {
+  background-color: #fee;
+  color: #c33;
+  padding: 1rem;
+  border-radius: 8px;
+  margin: 1rem 1.5rem;
+  border: 1px solid #fcc;
+}
+
+.loading-spinner {
+  text-align: center;
+  font-size: 2rem;
+  margin: 2rem 0;
+}
+
+.loading-wizard {
+  max-width: 500px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+}
+
+.loading-content {
+  text-align: center;
+  padding: 3rem 2rem;
+  width: 100%;
+}
+
+.loading-spinner-large {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 2rem;
+  border: 4px solid #f0f0f0;
+  border-top-color: #4a90e2;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-content h2 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.5rem;
+  color: #333;
+  font-weight: 600;
+}
+
+.loading-content p {
+  margin: 0.5rem 0;
+  color: #666;
+  font-size: 1rem;
+}
+
+.loading-subtext {
+  color: #999 !important;
+  font-size: 0.875rem !important;
+  font-style: italic;
+}
+
+.success-icon {
+  font-size: 4rem;
+  margin: 0 auto 1.5rem;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.8;
+  }
+}
+
+.loading-content .wizard-button {
+  margin-top: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .wizard-content {
+    flex-direction: column;
+  }
+
+  .wizard-photo {
+    max-height: 300px;
+  }
+
+  .loading-wizard {
+    max-width: 90%;
+  }
+
+  .loading-content {
+    padding: 2rem 1.5rem;
+  }
+}
+

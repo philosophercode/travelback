@@ -127,8 +127,12 @@ if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null 2>&1 ; then
     fi
 fi
 
+# Note: Database migrations run automatically when the server starts
+# To run migrations manually, use: npm run db:migrate
+
 # Start the application
 echo -e "${GREEN}Starting TravelBack API server...${NC}\n"
+echo -e "${BLUE}Note: Database migrations will run automatically on startup${NC}\n"
 
 # Display server URLs
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"

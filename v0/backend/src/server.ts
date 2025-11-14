@@ -1,6 +1,8 @@
 import { config } from './config';
 import { logger } from './utils/logger';
 import { testConnection, closePool } from './database/db';
+import { runMigrations } from './database/migrations';
+import { cleanupService } from './services/cleanup.service';
 import app from './app';
 
 // Start server
@@ -13,24 +15,21 @@ async function startServer(): Promise<void> {
       process.exit(1);
     }
 
+    // Run migrations
+    await runMigrations();
+
+    // Clean up stuck trips on startup
+    await cleanupService.cleanupStuckTrips(30);
+
+    // Start periodic cleanup (every hour)
+    cleanupService.startPeriodicCleanup(60);
+
     // Start HTTP server
-    const server = app.listen(config.port, () => {
+    app.listen(config.port, () => {
       logger.info(`Server running on port ${config.port}`);
       logger.info(`Environment: ${config.nodeEnv}`);
       logger.info(`Health check: http://localhost:${config.port}/health`);
     });
-
-    // Handle server errors (e.g., port already in use)
-    server.on('error', (error: NodeJS.ErrnoException) => {
-      if (error.code === 'EADDRINUSE') {
-        logger.error(`Port ${config.port} is already in use. Please stop the process using this port or change the PORT in your .env file.`);
-      } else {
-        logger.error('Server error:', error);
-      }
-      process.exit(1);
-    });
-
-    return server;
   } catch (error) {
     logger.error('Failed to start server', error);
     process.exit(1);

@@ -1,5 +1,5 @@
 import { getPool } from '../db';
-import { DayItinerary, CreateDayItineraryData } from '../../types';
+import { DayItinerary, CreateDayItineraryData, DayItinerarySummary } from '../../types';
 
 export class ItineraryRepository {
   /**
@@ -57,6 +57,27 @@ export class ItineraryRepository {
 
     if (result.rows.length === 0) {
       return null;
+    }
+
+    return this.mapRowToItinerary(result.rows[0]);
+  }
+
+  /**
+   * Update day itinerary summary
+   */
+  async update(id: string, data: { summary: DayItinerarySummary }): Promise<DayItinerary> {
+    const pool = getPool();
+    const query = `
+      UPDATE day_itineraries
+      SET summary = $1, updated_at = NOW()
+      WHERE id = $2
+      RETURNING *
+    `;
+
+    const result = await pool.query(query, [JSON.stringify(data.summary), id]);
+
+    if (result.rows.length === 0) {
+      throw new Error(`Day itinerary with id ${id} not found`);
     }
 
     return this.mapRowToItinerary(result.rows[0]);

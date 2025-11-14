@@ -22,6 +22,15 @@ export interface TripOverview {
   travelStyle?: string;
 }
 
+export interface NarrationState {
+  enabled: boolean;
+  status: 'not_started' | 'in_progress' | 'completed';
+  currentDayNumber?: number;
+  currentPhotoIndex?: number;
+  completedDays: number[];
+  completedPhotos: string[];
+}
+
 export interface Trip {
   id: string;
   name: string;
@@ -29,8 +38,10 @@ export interface Trip {
   endDate: string | null;
   overview: TripOverview | null;
   processingStatus: ProcessingStatus;
+  narrationState: NarrationState | null;
   createdAt: string;
   updatedAt: string;
+  thumbnailUrl?: string | null;
 }
 
 export interface PhotoDescription {
@@ -114,5 +125,13 @@ export interface TripResponse {
 export interface DayWithPhotos {
   day: DayItinerary;
   photos: Photo[];
+}
+
+export interface ProcessingProgress {
+  step: 'photos' | 'clustering' | 'itineraries' | 'overview';
+  total?: number;
+  completed?: number;
+  current?: number | null;
+  message: string;
 }
 

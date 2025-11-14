@@ -1,4 +1,4 @@
-import { ProcessingStatus, Photo, LocationData } from '../types';
+import { ProcessingStatus, Photo, LocationData, TripOverview } from '../types';
 import { TripRepository } from '../database/repositories/trip.repository';
 import { PhotoRepository } from '../database/repositories/photo.repository';
 import { ItineraryRepository } from '../database/repositories/itinerary.repository';
@@ -67,6 +67,18 @@ export class ProcessingService {
       await this.processPhotos(photos, tripId);
       const photoDuration = ((Date.now() - photoStartTime) / 1000).toFixed(1);
       logger.info(`[Trip ${tripId}] ✅ Step 1/4: Photo processing completed in ${photoDuration}s`);
+      
+      // Emit completion event for photos
+      sseService.sendToTrip(tripId, {
+        type: 'progress',
+        data: {
+          step: 'photos',
+          total: photos.length,
+          completed: photos.length,
+          current: null,
+          message: `All ${photos.length} photos processed`,
+        },
+      });
 
       // Refresh photos from database to get updated descriptions
       const updatedPhotos = await this.photoRepo.findByTrip(tripId);
@@ -97,11 +109,19 @@ export class ProcessingService {
       await this.clusterPhotosByDay(tripId, updatedPhotos);
       const clusterDuration = ((Date.now() - clusterStartTime) / 1000).toFixed(1);
       logger.info(`[Trip ${tripId}] ✅ Step 2/4: Photo clustering completed in ${clusterDuration}s`);
-
-      // Emit progress update
+      
+      // Get number of days after clustering
+      const photosAfterClustering = await this.photoRepo.findByTrip(tripId);
+      const uniqueDays = new Set(photosAfterClustering.filter(p => p.dayNumber !== null).map(p => p.dayNumber));
+      const totalDays = uniqueDays.size;
+      
+      // Emit clustering completion
       sseService.sendToTrip(tripId, {
         type: 'progress',
-        data: { step: 'itineraries', message: 'Generating day itineraries' },
+        data: {
+          step: 'clustering',
+          message: `Clustered photos into ${totalDays} day${totalDays !== 1 ? 's' : ''}`,
+        },
       });
 
       // Step 3: Generate day itineraries (ensures all days are processed)
@@ -123,6 +143,12 @@ export class ProcessingService {
       await this.generateTripOverview(tripId);
       const overviewDuration = ((Date.now() - overviewStartTime) / 1000).toFixed(1);
       logger.info(`[Trip ${tripId}] ✅ Step 4/4: Trip overview generation completed in ${overviewDuration}s`);
+      
+      // Emit overview completion
+      sseService.sendToTrip(tripId, {
+        type: 'progress',
+        data: { step: 'overview', message: 'Trip overview generated' },
+      });
 
       // Update trip status to completed
       await this.tripRepo.updateProcessingStatus(tripId, ProcessingStatus.COMPLETED);
@@ -205,24 +231,42 @@ export class ProcessingService {
       logger.info(`[Trip ${tripId}] 📸 Processing batch ${batchIndex + 1}/${batches.length} (${batch.length} photos)`);
       
       const batchStartTime = Date.now();
+      // Process photos in batch with individual progress tracking
+      const batchPromises = batch.map((photo, photoIndex) => {
+        const photoNumber = completedCount + photoIndex + 1;
+        // Emit current photo being processed
+        sseService.sendToTrip(tripId, {
+          type: 'progress',
+          data: {
+            step: 'photos',
+            total: photos.length,
+            completed: completedCount,
+            current: photoNumber,
+            message: `Processing photo ${photoNumber} of ${photos.length}`,
+          },
+        });
+        return this.processPhoto(photo, tripId);
+      });
+      
       // Wait for all photos in batch to complete (even if some fail)
-      await Promise.allSettled(
-        batch.map((photo) => this.processPhoto(photo, tripId))
-      );
+      await Promise.allSettled(batchPromises);
       const batchDuration = ((Date.now() - batchStartTime) / 1000).toFixed(1);
       
       completedCount += batch.length;
       
       logger.info(`[Trip ${tripId}] 📸 Batch ${batchIndex + 1}/${batches.length} completed in ${batchDuration}s (${completedCount}/${photos.length} total)`);
       
-      // Emit progress update
+      // Emit progress update after batch completes
       sseService.sendToTrip(tripId, {
         type: 'progress',
         data: {
           step: 'photos',
           total: photos.length,
           completed: completedCount,
-          message: `Processed ${completedCount}/${photos.length} photos`,
+          current: null,
+          message: completedCount < photos.length 
+            ? `Processed ${completedCount} of ${photos.length} photos`
+            : `All ${photos.length} photos processed`,
         },
       });
     }
@@ -555,56 +599,104 @@ export class ProcessingService {
       }
     }
 
-    // Generate itinerary for each day sequentially, waiting for all to complete
+    // Generate itinerary for each day sequentially to show accurate progress
     const results: Array<{ dayNumber: number; success: boolean; error?: Error }> = [];
-    const dayPromises = Array.from(daysWithDescriptions.entries()).map(
-      async ([dayNumber, dayPhotos]) => {
-        const dayStartTime = Date.now();
-        try {
-          logger.info(`[Trip ${tripId}] 📝 Day ${dayNumber}: Generating itinerary from ${dayPhotos.length} photos...`);
-          
-          // Get date from first photo
-          const firstPhoto = dayPhotos[0];
-          if (!firstPhoto.capturedAt) {
-            logger.warn(`[Trip ${tripId}] ⚠️  Day ${dayNumber} has no capture date, skipping`);
-            return { dayNumber, success: false, error: new Error('No capture date') };
-          }
-
-          const date = new Date(firstPhoto.capturedAt);
-
-          // Generate summary
-          const summary = await this.dayItineraryAgent.generateSummary(dayPhotos);
-
-          // Save itinerary
-          await this.itineraryRepo.create({
-            tripId,
-            dayNumber,
-            date,
-            summary,
-          });
-
-          const dayDuration = ((Date.now() - dayStartTime) / 1000).toFixed(1);
-          logger.info(`[Trip ${tripId}] ✅ Day ${dayNumber}: Itinerary generated in ${dayDuration}s (title: "${summary.title}")`);
-          return { dayNumber, success: true };
-        } catch (error) {
-          const dayDuration = ((Date.now() - dayStartTime) / 1000).toFixed(1);
-          logger.error(`[Trip ${tripId}] ❌ Day ${dayNumber}: Failed to generate itinerary after ${dayDuration}s`, error);
-          return { dayNumber, success: false, error: error as Error };
-        }
-      }
-    );
-
-    // Wait for ALL days to complete (success or failure)
-    const dayResults = await Promise.allSettled(dayPromises);
+    const totalDays = daysWithDescriptions.size;
+    const sortedDays = Array.from(daysWithDescriptions.entries()).sort(([a], [b]) => a - b);
     
-    // Extract results
-    dayResults.forEach((result) => {
-      if (result.status === 'fulfilled') {
-        results.push(result.value);
-      } else {
-        logger.error(`[Trip ${tripId}] ❌ Unexpected error in day itinerary promise`, result.reason);
-      }
+    // Emit initial progress
+    sseService.sendToTrip(tripId, {
+      type: 'progress',
+      data: {
+        step: 'itineraries',
+        total: totalDays,
+        completed: 0,
+        current: null,
+        message: `Generating ${totalDays} day itinerary${totalDays !== 1 ? 'ies' : ''}`,
+      },
     });
+    
+    // Process days sequentially
+    for (let i = 0; i < sortedDays.length; i++) {
+      const [dayNumber, dayPhotos] = sortedDays[i];
+      const dayStartTime = Date.now();
+      const completedCount = i;
+      
+      try {
+        // Emit current day being processed
+        sseService.sendToTrip(tripId, {
+          type: 'progress',
+          data: {
+            step: 'itineraries',
+            total: totalDays,
+            completed: completedCount,
+            current: dayNumber,
+            message: `Processing day ${dayNumber} of ${totalDays}`,
+          },
+        });
+        
+        logger.info(`[Trip ${tripId}] 📝 Day ${dayNumber}: Generating itinerary from ${dayPhotos.length} photos...`);
+        
+        // Get date from first photo
+        const firstPhoto = dayPhotos[0];
+        if (!firstPhoto.capturedAt) {
+          logger.warn(`[Trip ${tripId}] ⚠️  Day ${dayNumber} has no capture date, skipping`);
+          results.push({ dayNumber, success: false, error: new Error('No capture date') });
+          continue;
+        }
+
+        const date = new Date(firstPhoto.capturedAt);
+
+        // Generate summary
+        const summary = await this.dayItineraryAgent.generateSummary(dayPhotos);
+
+        // Save itinerary
+        await this.itineraryRepo.create({
+          tripId,
+          dayNumber,
+          date,
+          summary,
+        });
+
+        const dayDuration = ((Date.now() - dayStartTime) / 1000).toFixed(1);
+        logger.info(`[Trip ${tripId}] ✅ Day ${dayNumber}: Itinerary generated in ${dayDuration}s (title: "${summary.title}")`);
+        
+        results.push({ dayNumber, success: true });
+        
+        // Emit day completion
+        const newCompletedCount = i + 1;
+        sseService.sendToTrip(tripId, {
+          type: 'progress',
+          data: {
+            step: 'itineraries',
+            total: totalDays,
+            completed: newCompletedCount,
+            current: null,
+            message: newCompletedCount < totalDays
+              ? `Processed ${newCompletedCount} of ${totalDays} days`
+              : `All ${totalDays} days processed`,
+          },
+        });
+      } catch (error) {
+        const dayDuration = ((Date.now() - dayStartTime) / 1000).toFixed(1);
+        logger.error(`[Trip ${tripId}] ❌ Day ${dayNumber}: Failed to generate itinerary after ${dayDuration}s`, error);
+        
+        results.push({ dayNumber, success: false, error: error as Error });
+        
+        // Emit day failure
+        const newCompletedCount = i + 1;
+        sseService.sendToTrip(tripId, {
+          type: 'progress',
+          data: {
+            step: 'itineraries',
+            total: totalDays,
+            completed: newCompletedCount,
+            current: null,
+            message: `Processed ${newCompletedCount} of ${totalDays} days`,
+          },
+        });
+      }
+    }
 
     // Verify all days have been processed by checking database
     const allDaysProcessed = await Promise.all(
@@ -676,16 +768,16 @@ export class ProcessingService {
 
     logger.info(`[Trip ${tripId}] 🎯 Overview generated in ${overviewDuration}s (title: "${overview.title}")`);
 
-    // Update trip with overview and use overview title as trip name
-    await this.tripRepo.updateOverview(tripId, overview);
-
-    // Update trip dates
+    // Calculate trip dates
     const dates = photos
       .map((p) => p.capturedAt)
       .filter((d): d is Date => d !== null)
       .sort((a, b) => a.getTime() - b.getTime());
 
-    const updates: { startDate?: Date; endDate?: Date; name?: string } = {};
+    // Update trip with overview, dates, and name in a single atomic update
+    const updates: { overview?: TripOverview; startDate?: Date; endDate?: Date; name?: string } = {
+      overview,
+    };
     
     if (dates.length > 0) {
       updates.startDate = dates[0];
@@ -699,9 +791,8 @@ export class ProcessingService {
       logger.info(`[Trip ${tripId}] ✏️  Trip name updated to: "${overview.title}"`);
     }
 
-    if (Object.keys(updates).length > 0) {
-      await this.tripRepo.update(tripId, updates);
-    }
+    // Single atomic update to ensure consistency
+    await this.tripRepo.update(tripId, updates);
 
     logger.info(`[Trip ${tripId}] ✅ Trip overview generated and trip updated`);
   }

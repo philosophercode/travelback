@@ -1,5 +1,5 @@
 import { getPool } from '../db';
-import { Trip, CreateTripData, UpdateTripData, ProcessingStatus } from '../../types';
+import { Trip, CreateTripData, UpdateTripData, ProcessingStatus, NarrationState } from '../../types';
 import { logger } from '../../utils/logger';
 
 export class TripRepository {
@@ -77,6 +77,10 @@ export class TripRepository {
       updates.push(`processing_status = $${paramCount++}`);
       values.push(data.processingStatus);
     }
+    if (data.narrationState !== undefined) {
+      updates.push(`narration_state = $${paramCount++}`);
+      values.push(JSON.stringify(data.narrationState));
+    }
 
     updates.push(`updated_at = NOW()`);
     values.push(id);
@@ -112,6 +116,63 @@ export class TripRepository {
   }
 
   /**
+   * Update narration state
+   */
+  async updateNarrationState(id: string, state: NarrationState): Promise<void> {
+    await this.update(id, { narrationState: state });
+  }
+
+  /**
+   * Find trips stuck in processing status (updated more than threshold minutes ago)
+   */
+  async findStuckProcessingTrips(thresholdMinutes: number = 30): Promise<Trip[]> {
+    const pool = getPool();
+    // Use interval multiplication for PostgreSQL compatibility
+    const query = `
+      SELECT * FROM trips
+      WHERE processing_status = $1
+        AND updated_at < NOW() - ($2 * INTERVAL '1 minute')
+      ORDER BY updated_at ASC
+    `;
+    
+    const result = await pool.query(query, [ProcessingStatus.PROCESSING, thresholdMinutes]);
+    
+    return result.rows.map((row) => this.mapRowToTrip(row));
+  }
+
+  /**
+   * Delete a trip by ID
+   * Note: Database CASCADE will delete related photos, day itineraries, and narration answers
+   * But we need to manually delete photo files from storage
+   */
+  async delete(id: string): Promise<void> {
+    const pool = getPool();
+    const query = 'DELETE FROM trips WHERE id = $1';
+    
+    const result = await pool.query(query, [id]);
+    
+    if (result.rowCount === 0) {
+      throw new Error(`Trip with id ${id} not found`);
+    }
+  }
+
+  /**
+   * Delete multiple trips by IDs
+   */
+  async deleteMany(ids: string[]): Promise<number> {
+    if (ids.length === 0) {
+      return 0;
+    }
+
+    const pool = getPool();
+    const query = `DELETE FROM trips WHERE id = ANY($1::uuid[])`;
+    
+    const result = await pool.query(query, [ids]);
+    
+    return result.rowCount || 0;
+  }
+
+  /**
    * Map database row to Trip entity
    */
   private mapRowToTrip(row: any): Trip {
@@ -122,6 +183,7 @@ export class TripRepository {
       endDate: row.end_date ? new Date(row.end_date) : null,
       overview: row.overview,
       processingStatus: row.processing_status as ProcessingStatus,
+      narrationState: row.narration_state,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
     };
