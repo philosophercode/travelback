@@ -401,12 +401,12 @@ fi
 echo -e "${CYAN}🔍 Running database migrations...${NC}"
 cd "$BACKEND_DIR"
 
-if npx tsx src/database/setup.ts > /tmp/travelback-db-setup.log 2>&1; then
+if npm run db:setup > /tmp/travelback-db-setup.log 2>&1; then
     echo -e "${GREEN}✅ Database migrations completed${NC}\n"
 else
     echo -e "${RED}❌ Failed to run database migrations. Check logs:${NC}"
     tail -20 /tmp/travelback-db-setup.log
-    echo -e "${YELLOW}You can try running manually: cd backend && npx tsx src/database/setup.ts${NC}"
+    echo -e "${YELLOW}You can try running manually: cd backend && npm run db:setup${NC}"
     exit 1
 fi
 
