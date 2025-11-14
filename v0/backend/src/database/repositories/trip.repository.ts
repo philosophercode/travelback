@@ -21,6 +21,18 @@ export class TripRepository {
   }
 
   /**
+   * Find all trips
+   */
+  async findAll(): Promise<Trip[]> {
+    const pool = getPool();
+    const query = 'SELECT * FROM trips ORDER BY created_at DESC';
+    
+    const result = await pool.query(query);
+    
+    return result.rows.map((row) => this.mapRowToTrip(row));
+  }
+
+  /**
    * Find trip by ID
    */
   async findById(id: string): Promise<Trip | null> {

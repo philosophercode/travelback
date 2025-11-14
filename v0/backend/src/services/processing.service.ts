@@ -427,7 +427,7 @@ export class ProcessingService {
     // Generate overview using all available day itineraries
     const overview = await this.tripOverviewAgent.generateOverview(itineraries, photos);
 
-    // Update trip
+    // Update trip with overview and use overview title as trip name
     await this.tripRepo.updateOverview(tripId, overview);
 
     // Update trip dates
@@ -436,14 +436,23 @@ export class ProcessingService {
       .filter((d): d is Date => d !== null)
       .sort((a, b) => a.getTime() - b.getTime());
 
+    const updates: { startDate?: Date; endDate?: Date; name?: string } = {};
+    
     if (dates.length > 0) {
-      await this.tripRepo.update(tripId, {
-        startDate: dates[0],
-        endDate: dates[dates.length - 1],
-      });
+      updates.startDate = dates[0];
+      updates.endDate = dates[dates.length - 1];
     }
 
-    logger.debug('Trip overview generated');
+    // Update trip name with overview title if available
+    if (overview.title) {
+      updates.name = overview.title;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await this.tripRepo.update(tripId, updates);
+    }
+
+    logger.debug('Trip overview generated and trip name updated');
   }
 }
 

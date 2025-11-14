@@ -3,6 +3,7 @@ import {
   createTrip,
   uploadPhotos,
   processTrip,
+  listTrips,
   getTrip,
   getDayItinerary,
   getTripStatusStream,
@@ -11,6 +12,12 @@ import { uploadPhotos as uploadMiddleware } from '../middleware/upload';
 import { asyncHandler } from '../middleware/async-handler';
 
 const router = Router();
+
+/**
+ * GET /api/trips
+ * List all trips
+ */
+router.get('/', asyncHandler(listTrips));
 
 /**
  * POST /api/trips

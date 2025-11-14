@@ -107,6 +107,38 @@ parse_sse_event() {
           if [ "$STATUS" = "completed" ]; then
             echo -e "${GREEN}✅ Processing completed!${NC}\n"
             PROCESSING_COMPLETE=true
+            
+            # Fetch and display trip details immediately
+            echo -e "${YELLOW}📋 Fetching trip details...${NC}\n"
+            TRIP_RESPONSE=$(curl -s -X GET "${API_URL}/api/trips/${TRIP_ID}")
+            
+            # Extract overview title and summary
+            OVERVIEW_TITLE=$(echo "$TRIP_RESPONSE" | jq -r '.data.trip.overview.title // empty' 2>/dev/null)
+            OVERVIEW_SUMMARY=$(echo "$TRIP_RESPONSE" | jq -r '.data.trip.overview.summary // empty' 2>/dev/null)
+            TRIP_NAME=$(echo "$TRIP_RESPONSE" | jq -r '.data.trip.name // empty' 2>/dev/null)
+            
+            echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo -e "${GREEN}✨ Trip Complete ✨${NC}"
+            echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo -e "${BLUE}🆔 Trip ID:${NC} ${TRIP_ID}"
+            echo ""
+            
+            if [ -n "$OVERVIEW_TITLE" ] && [ "$OVERVIEW_TITLE" != "null" ] && [ "$OVERVIEW_TITLE" != "" ]; then
+              echo -e "${YELLOW}📖 Title:${NC} ${OVERVIEW_TITLE}"
+              echo ""
+            elif [ -n "$TRIP_NAME" ] && [ "$TRIP_NAME" != "null" ]; then
+              echo -e "${YELLOW}📖 Trip Name:${NC} ${TRIP_NAME}"
+              echo ""
+            fi
+            
+            if [ -n "$OVERVIEW_SUMMARY" ] && [ "$OVERVIEW_SUMMARY" != "null" ] && [ "$OVERVIEW_SUMMARY" != "" ]; then
+              echo -e "${BLUE}📝 Overview:${NC}"
+              echo "$OVERVIEW_SUMMARY" | fold -s -w 80 | sed 's/^/   /'
+              echo ""
+            fi
+            
+            echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo ""
           elif [ "$STATUS" = "failed" ]; then
             echo -e "${RED}⚠️  Processing failed${NC}\n"
             PROCESSING_COMPLETE=true
@@ -210,6 +242,48 @@ sleep 3
 # Step 5: Show final results
 echo -e "${YELLOW}Step 5: Final trip details...${NC}\n"
 TRIP_RESPONSE=$(curl -s -X GET "${API_URL}/api/trips/${TRIP_ID}")
+
+# Extract key information for summary
+OVERVIEW_TITLE=$(echo "$TRIP_RESPONSE" | jq -r '.data.trip.overview.title // empty' 2>/dev/null)
+OVERVIEW_SUMMARY=$(echo "$TRIP_RESPONSE" | jq -r '.data.trip.overview.summary // empty' 2>/dev/null)
+TRIP_NAME=$(echo "$TRIP_RESPONSE" | jq -r '.data.trip.name // empty' 2>/dev/null)
+TOTAL_PHOTOS=$(echo "$TRIP_RESPONSE" | jq -r '.data.totalPhotos // 0' 2>/dev/null)
+TOTAL_DAYS=$(echo "$TRIP_RESPONSE" | jq -r '.data.days | length' 2>/dev/null || echo "0")
+
+# Display summary box
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}✨ Trip Summary ✨${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BLUE}🆔 Trip ID:${NC} ${TRIP_ID}"
+echo ""
+
+if [ -n "$OVERVIEW_TITLE" ] && [ "$OVERVIEW_TITLE" != "null" ] && [ "$OVERVIEW_TITLE" != "" ]; then
+  echo -e "${YELLOW}📖 Title:${NC} ${OVERVIEW_TITLE}"
+elif [ -n "$TRIP_NAME" ] && [ "$TRIP_NAME" != "null" ]; then
+  echo -e "${YELLOW}📖 Trip Name:${NC} ${TRIP_NAME}"
+fi
+
+if [ -n "$TOTAL_PHOTOS" ] && [ "$TOTAL_PHOTOS" != "0" ]; then
+  echo -e "${BLUE}📸 Photos:${NC} ${TOTAL_PHOTOS}"
+fi
+
+if [ -n "$TOTAL_DAYS" ] && [ "$TOTAL_DAYS" != "0" ]; then
+  echo -e "${BLUE}📅 Days:${NC} ${TOTAL_DAYS}"
+fi
+
+echo ""
+
+if [ -n "$OVERVIEW_SUMMARY" ] && [ "$OVERVIEW_SUMMARY" != "null" ] && [ "$OVERVIEW_SUMMARY" != "" ]; then
+  echo -e "${BLUE}📝 Overview:${NC}"
+  echo "$OVERVIEW_SUMMARY" | fold -s -w 80 | sed 's/^/   /'
+  echo ""
+fi
+
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+# Also show full JSON response
+echo -e "${YELLOW}Full trip data (JSON):${NC}"
 echo "$TRIP_RESPONSE" | jq '.' 2>/dev/null || echo "$TRIP_RESPONSE"
 echo ""
 
@@ -230,7 +304,13 @@ else
   echo -e "   Check trip status: ${API_URL}/api/trips/${TRIP_ID}"
 fi
 
-echo -e "${GREEN}✨ Test complete!${NC}"
-echo -e "Trip ID: ${TRIP_ID}"
-echo -e "View trip: ${API_URL}/api/trips/${TRIP_ID}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}✨ Test Complete! ✨${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BLUE}🆔 Trip ID:${NC} ${TRIP_ID}"
+if [ -n "$OVERVIEW_TITLE" ] && [ "$OVERVIEW_TITLE" != "null" ] && [ "$OVERVIEW_TITLE" != "" ]; then
+  echo -e "${YELLOW}📖 Title:${NC} ${OVERVIEW_TITLE}"
+fi
+echo -e "${BLUE}🔗 View trip:${NC} ${API_URL}/api/trips/${TRIP_ID}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 

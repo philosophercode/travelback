@@ -160,6 +160,24 @@ export async function processTrip(req: Request, res: Response): Promise<void> {
 }
 
 /**
+ * List all trips
+ */
+export async function listTrips(req: Request, res: Response): Promise<void> {
+  const trips = await tripRepo.findAll();
+
+  const response: ApiResponse<{
+    trips: typeof trips;
+  }> = {
+    success: true,
+    data: {
+      trips,
+    },
+  };
+
+  res.json(response);
+}
+
+/**
  * Get trip details with overview and days
  */
 export async function getTrip(req: Request, res: Response): Promise<void> {
