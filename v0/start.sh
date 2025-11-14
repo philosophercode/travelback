@@ -397,6 +397,14 @@ else
     create_env_file  # Still call it to ensure .env exists (it will return early)
 fi
 
+# Check backend node_modules and install if needed (required for migrations)
+if [ ! -d "${BACKEND_DIR}/node_modules" ]; then
+    echo -e "${YELLOW}Backend dependencies not found. Installing...${NC}"
+    cd "$BACKEND_DIR"
+    npm install
+    echo -e "${GREEN}✅ Backend dependencies installed${NC}\n"
+fi
+
 # Run database migrations (will create schema if needed and apply any pending migrations)
 echo -e "${CYAN}🔍 Running database migrations...${NC}"
 cd "$BACKEND_DIR"
@@ -408,14 +416,6 @@ else
     tail -20 /tmp/travelback-db-setup.log
     echo -e "${YELLOW}You can try running manually: cd backend && npm run db:setup${NC}"
     exit 1
-fi
-
-# Check backend node_modules
-if [ ! -d "${BACKEND_DIR}/node_modules" ]; then
-    echo -e "${YELLOW}Backend dependencies not found. Installing...${NC}"
-    cd "$BACKEND_DIR"
-    npm install
-    echo -e "${GREEN}✅ Backend dependencies installed${NC}\n"
 fi
 
 # Check frontend node_modules
