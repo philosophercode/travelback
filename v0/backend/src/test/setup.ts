@@ -1,5 +1,4 @@
-import { beforeAll, afterAll } from 'vitest';
-import { getPool } from '../database/db';
+import { afterAll } from 'vitest';
 
 // Setup test environment variables if not already set
 if (!process.env.DATABASE_URL) {
@@ -19,10 +18,10 @@ if (!process.env.NODE_ENV) {
 // Note: Individual test suites handle their own cleanup
 // This is a fallback for any remaining test data
 afterAll(async () => {
-  const pool = getPool();
   try {
     // Only clean up if explicitly needed (tests should clean up themselves)
     // Commented out to avoid interfering with test suites that manage their own cleanup
+    // const pool = getPool();
     // await pool.query('DELETE FROM photos');
     // await pool.query('DELETE FROM day_itineraries');
     // await pool.query('DELETE FROM trips');

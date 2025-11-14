@@ -22,9 +22,12 @@ export function getPool(): Pool {
       logger.error('Unexpected error on idle client', err);
     });
 
-    pool.on('connect', () => {
-      logger.debug('New database client connected');
-    });
+    // Log connection events less verbosely (only in development)
+    if (process.env.NODE_ENV === 'development' && process.env.LOG_DB_CONNECTIONS === 'true') {
+      pool.on('connect', () => {
+        logger.debug('New database client connected');
+      });
+    }
   }
 
   return pool;

@@ -7,7 +7,6 @@ import { exifService } from '../services/exif.service';
 import { locationService } from '../services/location.service';
 import { processingService } from '../services/processing.service';
 import { sseService } from '../services/sse.service';
-import { narrationService } from '../services/narration.service';
 import { AppError } from '../middleware/error-handler';
 import { ApiResponse, CreateTripData, Photo, ProcessingStatus } from '../types';
 import { logger } from '../utils/logger';
@@ -311,7 +310,7 @@ export async function processTrip(req: Request, res: Response): Promise<void> {
 /**
  * List all trips
  */
-export async function listTrips(req: Request, res: Response): Promise<void> {
+export async function listTrips(_req: Request, res: Response): Promise<void> {
   const trips = await tripRepo.findAll();
 
   // Get first photo for each trip to use as thumbnail
