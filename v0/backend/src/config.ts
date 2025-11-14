@@ -94,7 +94,7 @@ export const config: Config = {
   },
   storage: {
     provider: (getEnvVar('STORAGE_PROVIDER', 'local') as 'local' | 'supabase'),
-    uploadDir: getEnvVar('UPLOAD_DIR', './uploads'),
+    uploadDir: getEnvVar('UPLOAD_DIR', '../uploads'),
     maxFileSizeMB: getEnvNumber('MAX_FILE_SIZE_MB', 10),
   },
   processing: {

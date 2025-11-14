@@ -1,26 +1,7 @@
-import express from 'express';
 import { config } from './config';
 import { logger } from './utils/logger';
 import { testConnection, closePool } from './database/db';
-import { errorHandler } from './middleware/error-handler';
-import tripsRoutes from './routes/trips.routes';
-
-const app = express();
-
-// Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// API routes
-app.use('/api/trips', tripsRoutes);
-
-// Error handling middleware (must be last)
-app.use(errorHandler);
+import app from './app';
 
 // Start server
 async function startServer(): Promise<void> {
@@ -33,11 +14,13 @@ async function startServer(): Promise<void> {
     }
 
     // Start HTTP server
-    app.listen(config.port, () => {
+    const server = app.listen(config.port, () => {
       logger.info(`Server running on port ${config.port}`);
       logger.info(`Environment: ${config.nodeEnv}`);
       logger.info(`Health check: http://localhost:${config.port}/health`);
     });
+
+    return server;
   } catch (error) {
     logger.error('Failed to start server', error);
     process.exit(1);

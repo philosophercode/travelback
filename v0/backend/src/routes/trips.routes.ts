@@ -5,6 +5,7 @@ import {
   processTrip,
   getTrip,
   getDayItinerary,
+  getTripStatusStream,
 } from '../controllers/trips.controller';
 import { uploadPhotos as uploadMiddleware } from '../middleware/upload';
 import { asyncHandler } from '../middleware/async-handler';
@@ -40,6 +41,12 @@ router.get('/:tripId', asyncHandler(getTrip));
  * Get specific day itinerary with photos
  */
 router.get('/:tripId/days/:dayNumber', asyncHandler(getDayItinerary));
+
+/**
+ * GET /api/trips/:id/status
+ * Get trip processing status stream via Server-Sent Events (SSE)
+ */
+router.get('/:tripId/status', asyncHandler(getTripStatusStream));
 
 export default router;
 

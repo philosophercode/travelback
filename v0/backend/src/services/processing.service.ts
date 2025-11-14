@@ -6,6 +6,7 @@ import { ImageDescriptionAgent } from '../agents/image-description.agent';
 import { DayItineraryAgent } from '../agents/day-itinerary.agent';
 import { TripOverviewAgent } from '../agents/trip-overview.agent';
 import { storageService } from './storage.service';
+import { sseService } from './sse.service';
 import { logger } from '../utils/logger';
 import { config } from '../config';
 
@@ -35,17 +36,29 @@ export class ProcessingService {
     try {
       // Update trip status
       await this.tripRepo.updateProcessingStatus(tripId, ProcessingStatus.PROCESSING);
+      
+      // Emit status update via SSE
+      sseService.sendToTrip(tripId, {
+        type: 'status',
+        data: { status: ProcessingStatus.PROCESSING, message: 'Processing started' },
+      });
 
       // Get all photos for the trip
       const photos = await this.photoRepo.findByTrip(tripId);
       logger.info(`Found ${photos.length} photos to process`);
+      
+      // Emit progress update
+      sseService.sendToTrip(tripId, {
+        type: 'progress',
+        data: { step: 'photos', total: photos.length, completed: 0 },
+      });
 
       if (photos.length === 0) {
         throw new Error('No photos found for trip');
       }
 
       // Step 1: Process each photo (describe + locate)
-      await this.processPhotos(photos);
+      await this.processPhotos(photos, tripId);
 
       // Refresh photos from database to get updated descriptions
       const updatedPhotos = await this.photoRepo.findByTrip(tripId);
@@ -60,21 +73,81 @@ export class ProcessingService {
         );
       }
 
+      // Emit progress update
+      sseService.sendToTrip(tripId, {
+        type: 'progress',
+        data: { step: 'clustering', message: 'Clustering photos by day' },
+      });
+
       // Step 2: Cluster photos by day (use fresh photo data)
       await this.clusterPhotosByDay(tripId, updatedPhotos);
 
+      // Emit progress update
+      sseService.sendToTrip(tripId, {
+        type: 'progress',
+        data: { step: 'itineraries', message: 'Generating day itineraries' },
+      });
+
       // Step 3: Generate day itineraries (ensures all days are processed)
       await this.generateDayItineraries(tripId);
+
+      // Emit progress update
+      sseService.sendToTrip(tripId, {
+        type: 'progress',
+        data: { step: 'overview', message: 'Generating trip overview' },
+      });
 
       // Step 4: Generate trip overview (verifies all days have itineraries)
       await this.generateTripOverview(tripId);
 
       // Update trip status to completed
       await this.tripRepo.updateProcessingStatus(tripId, ProcessingStatus.COMPLETED);
+      
+      // Emit completion event
+      sseService.sendToTrip(tripId, {
+        type: 'status',
+        data: { status: ProcessingStatus.COMPLETED, message: 'Processing completed successfully' },
+      });
+      
+      // Fetch complete trip data for summary
+      const completedTrip = await this.tripRepo.findById(tripId);
+      const finalPhotos = await this.photoRepo.findByTrip(tripId);
+      const itineraries = await this.itineraryRepo.findByTrip(tripId);
+      
+      // Emit final summary event with trip data
+      sseService.sendToTrip(tripId, {
+        type: 'summary',
+        data: {
+          tripId: completedTrip!.id,
+          name: completedTrip!.name,
+          startDate: completedTrip!.startDate?.toISOString() || null,
+          endDate: completedTrip!.endDate?.toISOString() || null,
+          status: completedTrip!.processingStatus,
+          totalPhotos: finalPhotos.length,
+          totalDays: itineraries.length,
+          overview: completedTrip!.overview,
+          days: itineraries.map((day) => ({
+            dayNumber: day.dayNumber,
+            date: day.date.toISOString(),
+            title: day.summary.title,
+          })),
+        },
+      });
+      
       logger.info(`Processing completed for trip ${tripId}`);
     } catch (error) {
       logger.error(`Processing failed for trip ${tripId}`, error);
       await this.tripRepo.updateProcessingStatus(tripId, ProcessingStatus.FAILED);
+      
+      // Emit failure event
+      sseService.sendToTrip(tripId, {
+        type: 'status',
+        data: {
+          status: ProcessingStatus.FAILED,
+          message: error instanceof Error ? error.message : 'Processing failed',
+        },
+      });
+      
       throw error;
     }
   }
@@ -83,7 +156,7 @@ export class ProcessingService {
    * Process all photos: extract descriptions and locations
    * Waits for ALL photos to complete (success or failure) before returning
    */
-  private async processPhotos(photos: Photo[]): Promise<void> {
+  private async processPhotos(photos: Photo[], tripId: string): Promise<void> {
     const maxConcurrent = config.processing.maxConcurrentPhotos;
     const batches: Photo[][] = [];
 
@@ -93,11 +166,25 @@ export class ProcessingService {
     }
 
     // Process batches sequentially, waiting for each batch to complete
+    let completedCount = 0;
     for (const batch of batches) {
       // Wait for all photos in batch to complete (even if some fail)
       await Promise.allSettled(
         batch.map((photo) => this.processPhoto(photo))
       );
+      
+      completedCount += batch.length;
+      
+      // Emit progress update
+      sseService.sendToTrip(tripId, {
+        type: 'progress',
+        data: {
+          step: 'photos',
+          total: photos.length,
+          completed: completedCount,
+          message: `Processed ${completedCount}/${photos.length} photos`,
+        },
+      });
     }
 
     // Verify all photos have been processed (check status)

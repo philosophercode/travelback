@@ -6,6 +6,7 @@ import { storageService } from '../services/storage.service';
 import { exifService } from '../services/exif.service';
 import { locationService } from '../services/location.service';
 import { processingService } from '../services/processing.service';
+import { sseService } from '../services/sse.service';
 import { AppError } from '../middleware/error-handler';
 import { ApiResponse, CreateTripData } from '../types';
 import { logger } from '../utils/logger';
@@ -229,5 +230,29 @@ export async function getDayItinerary(req: Request, res: Response): Promise<void
   };
 
   res.json(response);
+}
+
+/**
+ * Get trip status stream via Server-Sent Events (SSE)
+ */
+export async function getTripStatusStream(req: Request, res: Response): Promise<void> {
+  const { tripId } = req.params;
+
+  // Verify trip exists
+  const trip = await tripRepo.findById(tripId);
+  if (!trip) {
+    throw new AppError('NOT_FOUND', 'Trip not found', 404);
+  }
+
+  // Register client for SSE stream
+  sseService.registerClient(tripId, res);
+
+  // Send current status immediately
+  sseService.sendToTrip(tripId, {
+    type: 'status',
+    data: { status: trip.processingStatus },
+  });
+
+  // Keep connection open - SSE service handles cleanup on disconnect
 }
 
