@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "db:setup": "tsx src/database/setup.ts",
+    "db:migrate": "tsx src/database/migrations/migrate.ts",
     "type-check": "tsc --noEmit",
     "test": "vitest",
     "test:watch": "vitest --watch",

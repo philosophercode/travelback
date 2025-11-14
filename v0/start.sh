@@ -397,26 +397,17 @@ else
     create_env_file  # Still call it to ensure .env exists (it will return early)
 fi
 
-# Check if database schema exists and set it up if needed
-echo -e "${CYAN}🔍 Checking database schema...${NC}"
+# Run database migrations (will create schema if needed and apply any pending migrations)
+echo -e "${CYAN}🔍 Running database migrations...${NC}"
 cd "$BACKEND_DIR"
 
-# Check if trips table exists
-TRIPS_EXISTS=$(docker exec travelback-postgres psql -U postgres -d travelback -tAc "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'trips');" 2>/dev/null || echo "false")
-
-if [ "$TRIPS_EXISTS" != "t" ]; then
-    # Schema missing - automatically set it up
-    echo -e "${YELLOW}⚠️  Database schema not found. Setting it up automatically...${NC}"
-    if npm run db:setup > /tmp/travelback-db-setup.log 2>&1; then
-        echo -e "${GREEN}✅ Database schema created${NC}\n"
-    else
-        echo -e "${RED}❌ Failed to create database schema. Check logs:${NC}"
-        tail -20 /tmp/travelback-db-setup.log
-        echo -e "${YELLOW}You can try running manually: cd backend && npm run db:setup${NC}"
-        exit 1
-    fi
+if npx tsx src/database/setup.ts > /tmp/travelback-db-setup.log 2>&1; then
+    echo -e "${GREEN}✅ Database migrations completed${NC}\n"
 else
-    echo -e "${GREEN}✅ Database schema already exists${NC}\n"
+    echo -e "${RED}❌ Failed to run database migrations. Check logs:${NC}"
+    tail -20 /tmp/travelback-db-setup.log
+    echo -e "${YELLOW}You can try running manually: cd backend && npx tsx src/database/setup.ts${NC}"
+    exit 1
 fi
 
 # Check backend node_modules
@@ -558,40 +549,73 @@ echo -e "  ${GREEN}✓${NC} Backend:     http://localhost:3000"
 echo -e "  ${GREEN}✓${NC} Frontend:    http://localhost:5173\n"
 echo -e "${YELLOW}Press Ctrl+C to stop all services${NC}\n"
 
-# Show logs in real-time (only for services we started)
-if [ ! -z "$BACKEND_PID" ]; then
+# Show logs and follow them
+LOG_FILES=""
+HAS_LOGS=false
+
+# Check for backend logs
+if [ -f /tmp/travelback-backend.log ]; then
     echo -e "${CYAN}Backend logs (last 10 lines):${NC}"
     tail -10 /tmp/travelback-backend.log
+    if [ -z "$LOG_FILES" ]; then
+        LOG_FILES="/tmp/travelback-backend.log"
+    else
+        LOG_FILES="$LOG_FILES /tmp/travelback-backend.log"
+    fi
+    HAS_LOGS=true
+elif [ ! -z "$BACKEND_PID" ]; then
+    # We started it but log file doesn't exist yet, wait a moment
+    sleep 1
+    if [ -f /tmp/travelback-backend.log ]; then
+        echo -e "${CYAN}Backend logs (last 10 lines):${NC}"
+        tail -10 /tmp/travelback-backend.log
+        if [ -z "$LOG_FILES" ]; then
+            LOG_FILES="/tmp/travelback-backend.log"
+        else
+            LOG_FILES="$LOG_FILES /tmp/travelback-backend.log"
+        fi
+        HAS_LOGS=true
+    fi
 fi
-if [ ! -z "$FRONTEND_PID" ]; then
-    if [ ! -z "$BACKEND_PID" ]; then
+
+# Check for frontend logs
+if [ -f /tmp/travelback-frontend.log ]; then
+    if [ "$HAS_LOGS" = true ]; then
         echo -e "\n${CYAN}Frontend logs (last 10 lines):${NC}"
     else
         echo -e "${CYAN}Frontend logs (last 10 lines):${NC}"
     fi
     tail -10 /tmp/travelback-frontend.log
-fi
-if [ ! -z "$BACKEND_PID" ] || [ ! -z "$FRONTEND_PID" ]; then
-    echo -e "\n${CYAN}Following logs (Ctrl+C to stop)...${NC}\n"
-fi
-
-# Follow logs (only if we started the processes)
-if [ ! -z "$BACKEND_PID" ] || [ ! -z "$FRONTEND_PID" ]; then
-    # Build list of log files to follow
-    LOG_FILES=""
-    if [ ! -z "$BACKEND_PID" ]; then
-        LOG_FILES="/tmp/travelback-backend.log"
+    if [ -z "$LOG_FILES" ]; then
+        LOG_FILES="/tmp/travelback-frontend.log"
+    else
+        LOG_FILES="$LOG_FILES /tmp/travelback-frontend.log"
     fi
-    if [ ! -z "$FRONTEND_PID" ]; then
+    HAS_LOGS=true
+elif [ ! -z "$FRONTEND_PID" ]; then
+    # We started it but log file doesn't exist yet, wait a moment
+    sleep 1
+    if [ -f /tmp/travelback-frontend.log ]; then
+        if [ "$HAS_LOGS" = true ]; then
+            echo -e "\n${CYAN}Frontend logs (last 10 lines):${NC}"
+        else
+            echo -e "${CYAN}Frontend logs (last 10 lines):${NC}"
+        fi
+        tail -10 /tmp/travelback-frontend.log
         if [ -z "$LOG_FILES" ]; then
             LOG_FILES="/tmp/travelback-frontend.log"
         else
             LOG_FILES="$LOG_FILES /tmp/travelback-frontend.log"
         fi
+        HAS_LOGS=true
     fi
-    
+fi
+
+# Follow logs if we have log files to follow
+if [ -n "$LOG_FILES" ]; then
+    echo -e "\n${CYAN}Following logs (Ctrl+C to stop)...${NC}\n"
     tail -f $LOG_FILES 2>/dev/null || {
-        # If tail -f fails, just wait for processes we started
+        # If tail -f fails, wait for processes we started
         if [ ! -z "$BACKEND_PID" ]; then
             wait $BACKEND_PID 2>/dev/null || true
         fi
@@ -600,9 +624,20 @@ if [ ! -z "$BACKEND_PID" ] || [ ! -z "$FRONTEND_PID" ]; then
         fi
     }
 else
-    # Both services were already running, just wait for interrupt
-    echo -e "${CYAN}All services are running. Waiting for Ctrl+C...${NC}"
-    while true; do
-        sleep 1
-    done
+    # No log files available - wait for processes we started or just wait
+    if [ ! -z "$BACKEND_PID" ] || [ ! -z "$FRONTEND_PID" ]; then
+        echo -e "${CYAN}Waiting for processes (Ctrl+C to stop)...${NC}\n"
+        if [ ! -z "$BACKEND_PID" ]; then
+            wait $BACKEND_PID 2>/dev/null || true
+        fi
+        if [ ! -z "$FRONTEND_PID" ]; then
+            wait $FRONTEND_PID 2>/dev/null || true
+        fi
+    else
+        echo -e "${CYAN}All services are running. Waiting for Ctrl+C...${NC}"
+        echo -e "${YELLOW}Note: Log files not found. If you started services manually, logs may be in a different location.${NC}\n"
+        while true; do
+            sleep 1
+        done
+    fi
 fi
