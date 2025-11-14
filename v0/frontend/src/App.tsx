@@ -1,10 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { TripSelector } from './components/TripSelector';
+import { TripCards } from './components/TripCards';
 import { TripOverview } from './components/TripOverview';
 import { DayView } from './components/DayView';
 import { PhotoThumbnails } from './components/PhotoThumbnails';
 import { TripMap } from './components/TripMap';
 import { UploadPage } from './components/UploadPage';
+import { ProcessingPage } from './components/ProcessingPage';
 import type { TripResponse, Trip } from './types';
 import { apiClient } from './api/client';
 import './App.css';
@@ -27,6 +29,9 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hoveredPhotoId, setHoveredPhotoId] = useState<string | null>(null);
+  const [processingTripsCount, setProcessingTripsCount] = useState(0);
+  const [deletingTrip, setDeletingTrip] = useState(false);
+  const [cancellingTrip, setCancellingTrip] = useState(false);
 
   // Update URL when tripId or page changes
   useEffect(() => {
@@ -65,6 +70,73 @@ function App() {
     setCurrentPage('view');
   };
 
+  // Handle trip deletion
+  const handleDeleteTrip = async () => {
+    if (!selectedTripId || !tripData) {
+      return;
+    }
+
+    const tripName = tripData.trip.overview?.title || tripData.trip.name;
+    if (!window.confirm(`Are you sure you want to delete "${tripName}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      setDeletingTrip(true);
+      await apiClient.deleteTrip(selectedTripId);
+      setSelectedTripId(null);
+      setTripData(null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete trip');
+    } finally {
+      setDeletingTrip(false);
+    }
+  };
+
+  // Handle cancel processing
+  const handleCancelProcessing = async () => {
+    if (!selectedTripId || !tripData) {
+      return;
+    }
+
+    if (!window.confirm('Are you sure you want to cancel processing? The trip will be marked as failed.')) {
+      return;
+    }
+
+    try {
+      setCancellingTrip(true);
+      await apiClient.cancelTripProcessing(selectedTripId);
+      // Reload trip data
+      const data = await apiClient.fetchTrip(selectedTripId);
+      setTripData(data);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to cancel processing');
+    } finally {
+      setCancellingTrip(false);
+    }
+  };
+
+  // Poll for processing trips to show icon in nav bar
+  useEffect(() => {
+    async function checkProcessingTrips() {
+      try {
+        const data = await apiClient.fetchTrips();
+        const processingTrips = data.trips.filter(
+          (trip) => trip.processingStatus === 'processing' || trip.processingStatus === 'pending'
+        );
+        setProcessingTripsCount(processingTrips.length);
+      } catch (err) {
+        // Silently fail - don't show error for background polling
+        console.error('Failed to check processing trips:', err);
+      }
+    }
+
+    checkProcessingTrips();
+    // Poll every 5 seconds
+    const interval = setInterval(checkProcessingTrips, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Memoize days array to prevent unnecessary rerenders in child components
   const stableDays = useMemo(() => {
     return tripData?.days || [];
@@ -101,7 +173,10 @@ function App() {
         <nav className="app-nav">
           <button
             className={`nav-button ${currentPage === 'view' ? 'active' : ''}`}
-            onClick={() => setCurrentPage('view')}
+            onClick={() => {
+              setCurrentPage('view');
+              setSelectedTripId(null);
+            }}
           >
             View Trips
           </button>
@@ -111,12 +186,27 @@ function App() {
           >
             Upload Photos
           </button>
+          {processingTripsCount > 0 && (
+            <button
+              className={`nav-button nav-button-processing ${currentPage === 'processing' ? 'active' : ''}`}
+              onClick={() => setCurrentPage('processing')}
+              title={`${processingTripsCount} trip${processingTripsCount !== 1 ? 's' : ''} processing`}
+            >
+              <span className="processing-icon">⚙️</span>
+              <span className="processing-badge">{processingTripsCount}</span>
+            </button>
+          )}
         </nav>
       </header>
 
       <main className="app-main">
         {currentPage === 'upload' ? (
           <UploadPage onUploadSuccess={handleUploadSuccess} />
+        ) : currentPage === 'processing' ? (
+          <ProcessingPage onTripSelect={(tripId) => {
+            setSelectedTripId(tripId);
+            setCurrentPage('view');
+          }} />
         ) : (
           <>
             <TripSelector
@@ -131,20 +221,45 @@ function App() {
         {tripData && (
           <div className="trip-content">
             <div className="trip-header">
-              <h2>{tripData.trip.overview?.title || tripData.trip.name}</h2>
-              {tripData.trip.startDate && (
-                <p className="trip-dates">
-                  {new Date(tripData.trip.startDate).toLocaleDateString()}
-                  {tripData.trip.endDate &&
-                    ` - ${new Date(tripData.trip.endDate).toLocaleDateString()}`}
-                </p>
-              )}
-              <p className="trip-status">
-                Status: <strong>{tripData.trip.processingStatus}</strong>
-              </p>
-              <p className="trip-stats">
-                {tripData.totalPhotos} photos • {tripData.days.length} days
-              </p>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+                <div style={{ flex: 1 }}>
+                  <h2>{tripData.trip.overview?.title || tripData.trip.name}</h2>
+                  {tripData.trip.startDate && (
+                    <p className="trip-dates">
+                      {new Date(tripData.trip.startDate).toLocaleDateString()}
+                      {tripData.trip.endDate &&
+                        ` - ${new Date(tripData.trip.endDate).toLocaleDateString()}`}
+                    </p>
+                  )}
+                  <p className="trip-status">
+                    Status: <strong>{tripData.trip.processingStatus}</strong>
+                  </p>
+                  <p className="trip-stats">
+                    {tripData.totalPhotos} photos • {tripData.days.length} days
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', flexDirection: 'column', alignItems: 'flex-end' }}>
+                  {tripData.trip.processingStatus === 'processing' || tripData.trip.processingStatus === 'pending' ? (
+                    <button
+                      className="trip-cancel-button"
+                      onClick={handleCancelProcessing}
+                      disabled={cancellingTrip}
+                      title="Cancel processing"
+                    >
+                      {cancellingTrip ? 'Cancelling...' : '✕ Cancel'}
+                    </button>
+                  ) : (
+                    <button
+                      className="trip-delete-button"
+                      onClick={handleDeleteTrip}
+                      disabled={deletingTrip}
+                      title="Delete trip"
+                    >
+                      {deletingTrip ? 'Deleting...' : '🗑️ Delete'}
+                    </button>
+                  )}
+                </div>
+              </div>
               {stableDays.length > 0 && (
                 <div className="photos-and-map-container">
                   <PhotoThumbnails 
@@ -187,9 +302,7 @@ function App() {
         )}
 
         {!selectedTripId && (
-          <div className="welcome">
-            <p>Select a trip from the dropdown above to view its details.</p>
-          </div>
+          <TripCards onTripSelect={setSelectedTripId} />
         )}
           </>
         )}

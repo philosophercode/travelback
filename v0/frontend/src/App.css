@@ -55,6 +55,45 @@
   color: white;
 }
 
+.nav-button-processing {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+.processing-icon {
+  font-size: 1.2rem;
+  animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.processing-badge {
+  background: #ff4444;
+  color: white;
+  border-radius: 10px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  min-width: 20px;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.nav-button-processing.active .processing-badge {
+  background: rgba(255, 255, 255, 0.3);
+}
+
 .app-main {
   margin-top: 2rem;
 }
@@ -145,6 +184,72 @@
   margin-bottom: 2rem;
   padding-bottom: 1rem;
   border-bottom: 1px solid #e0e0e0;
+}
+
+.trip-delete-button {
+  padding: 0.5rem 1rem;
+  background: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+  white-space: nowrap;
+}
+
+.trip-delete-button:hover:not(:disabled) {
+  background: #c82333;
+}
+
+.trip-delete-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.delete-all-others-button {
+  padding: 0.5rem 1rem;
+  background: #ff9800;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+  white-space: nowrap;
+}
+
+.delete-all-others-button:hover:not(:disabled) {
+  background: #f57c00;
+}
+
+.delete-all-others-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.trip-cancel-button {
+  padding: 0.5rem 1rem;
+  background: #ff9800;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+  white-space: nowrap;
+}
+
+.trip-cancel-button:hover:not(:disabled) {
+  background: #f57c00;
+}
+
+.trip-cancel-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .trip-header h2 {

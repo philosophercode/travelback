@@ -11,6 +11,7 @@ export function UploadPage({ onUploadSuccess }: UploadPageProps) {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [tripName, setTripName] = useState('');
   const [useCustomName, setUseCustomName] = useState(false);
+  const [enableNarration, setEnableNarration] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
@@ -79,13 +80,15 @@ export function UploadPage({ onUploadSuccess }: UploadPageProps) {
     try {
       const result = await apiClient.uploadTripWithPhotos(
         selectedFiles,
-        useCustomName && tripName.trim() ? tripName.trim() : undefined
+        useCustomName && tripName.trim() ? tripName.trim() : undefined,
+        enableNarration
       );
 
       // Reset form
       setSelectedFiles([]);
       setTripName('');
       setUseCustomName(false);
+      setEnableNarration(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -142,6 +145,23 @@ export function UploadPage({ onUploadSuccess }: UploadPageProps) {
             {!useCustomName && (
               <p className="auto-name-hint">
                 Trip name will be auto-generated based on the upload date
+              </p>
+            )}
+          </div>
+
+          {/* Narration Mode Section */}
+          <div className="trip-name-section">
+            <label className="trip-name-toggle">
+              <input
+                type="checkbox"
+                checked={enableNarration}
+                onChange={(e) => setEnableNarration(e.target.checked)}
+              />
+              <span>Enable interactive narration wizard (beta)</span>
+            </label>
+            {enableNarration && (
+              <p className="auto-name-hint">
+                After processing completes, you'll be guided through questions about each photo to create a personalized itinerary
               </p>
             )}
           </div>

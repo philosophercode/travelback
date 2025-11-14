@@ -31,6 +31,7 @@ export interface Trip {
   processingStatus: ProcessingStatus;
   createdAt: string;
   updatedAt: string;
+  thumbnailUrl?: string | null;
 }
 
 export interface PhotoDescription {

@@ -14,12 +14,12 @@ function withBase(path: string): string {
   return `${apiBase}/${path}`;
 }
 
-async function request<T>(path: string): Promise<T> {
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const url = withBase(path);
 
   let response: Response;
   try {
-    response = await fetch(url);
+    response = await fetch(url, options);
   } catch (error) {
     throw new Error('Unable to reach the TravelBack API. Is the backend running?');
   }
@@ -64,7 +64,8 @@ export function resolveMediaUrl(fileUrl?: string | null): string | null {
 
 async function uploadTripWithPhotos(
   photos: File[],
-  name?: string
+  name?: string,
+  enableNarration?: boolean
 ): Promise<{ trip: Trip; uploadedCount: number; photos: Photo[] }> {
   const url = withBase('/api/trips/upload');
   const formData = new FormData();
@@ -77,6 +78,11 @@ async function uploadTripWithPhotos(
   // Add optional trip name
   if (name && name.trim()) {
     formData.append('name', name.trim());
+  }
+
+  // Add narration flag if enabled
+  if (enableNarration) {
+    formData.append('enableNarration', 'true');
   }
 
   let response: Response;
@@ -107,11 +113,32 @@ async function uploadTripWithPhotos(
   return payload.data;
 }
 
+async function deleteTrip(tripId: string): Promise<{ message: string }> {
+  return request<{ message: string }>(`/api/trips/${tripId}`, {
+    method: 'DELETE',
+  });
+}
+
+async function deleteAllOtherTrips(tripId: string): Promise<{ message: string; deletedCount: number }> {
+  return request<{ message: string; deletedCount: number }>(`/api/trips/${tripId}/others`, {
+    method: 'DELETE',
+  });
+}
+
+async function cancelTripProcessing(tripId: string): Promise<{ message: string }> {
+  return request<{ message: string }>(`/api/trips/${tripId}/cancel`, {
+    method: 'POST',
+  });
+}
+
 export const apiClient = {
   fetchTrips,
   fetchTrip,
   fetchDay,
   resolveMediaUrl,
   uploadTripWithPhotos,
+  deleteTrip,
+  deleteAllOtherTrips,
+  cancelTripProcessing,
 };
 
