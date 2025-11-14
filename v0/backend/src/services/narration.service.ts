@@ -11,6 +11,8 @@ import {
   PhotoNarrationContext,
   CreateNarrationAnswerData,
   ProcessingStatus,
+  Photo,
+  PhotoDescription,
 } from '../types';
 import { logger } from '../utils/logger';
 

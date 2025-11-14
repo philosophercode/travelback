@@ -1,6 +1,5 @@
 import { getPool } from '../db';
 import { Trip, CreateTripData, UpdateTripData, ProcessingStatus, NarrationState } from '../../types';
-import { logger } from '../../utils/logger';
 
 export class TripRepository {
   /**

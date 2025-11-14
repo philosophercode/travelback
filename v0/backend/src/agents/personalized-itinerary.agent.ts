@@ -132,7 +132,7 @@ Make it personal, engaging, and true to the traveler's experience. Return only t
     totalPhotos: number
   ): Promise<TripOverview> {
     try {
-      const daySummaries = dayItineraries.map((day, index) => {
+      const daySummaries = dayItineraries.map((day) => {
         return `Day ${day.dayNumber} (${day.date.toISOString().split('T')[0]}): ${day.summary.title}\n${day.summary.narrative}\nHighlights: ${day.summary.highlights.join(', ')}`;
       }).join('\n\n');
 

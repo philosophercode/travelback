@@ -1,6 +1,5 @@
 import { getPool } from '../db';
 import { NarrationAnswer, CreateNarrationAnswerData } from '../../types';
-import { logger } from '../../utils/logger';
 
 export class NarrationAnswerRepository {
   /**

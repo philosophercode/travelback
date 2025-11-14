@@ -52,7 +52,7 @@ export class LocationService {
         throw new Error(`Geocoding failed: ${response.statusText}`);
       }
 
-      const data: NominatimResponse = await response.json();
+      const data = await response.json() as NominatimResponse;
 
       if (!data || !data.address) {
         logger.warn('No address data in geocoding response');

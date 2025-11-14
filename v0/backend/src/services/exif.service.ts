@@ -12,7 +12,7 @@ export class EXIFService {
         gps: true,
         exif: true,
         iptc: true,
-        ifd0: true,
+        ifd0: {},
         ifd1: true,
         translateKeys: true,
         translateValues: false,

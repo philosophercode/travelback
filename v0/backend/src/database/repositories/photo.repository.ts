@@ -7,7 +7,6 @@ import {
   ProcessingStatus,
   EXIFData,
 } from '../../types';
-import { logger } from '../../utils/logger';
 
 /**
  * Sanitize EXIF data by removing null bytes from strings

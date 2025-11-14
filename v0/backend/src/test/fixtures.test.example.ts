@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { ProcessingStatus } from '../types';
 
 /**
  * Example test file showing how to use exported trip fixtures
