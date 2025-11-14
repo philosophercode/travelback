@@ -116,8 +116,8 @@ PORT=3000
 NODE_ENV=development
 
 # LLM Configuration
-LLM_TEXT_MODEL=gpt-4o-mini
-LLM_VISION_MODEL=gpt-4o-mini
+LLM_TEXT_MODEL=gpt-5-nano
+LLM_VISION_MODEL=gpt-5-nano
 LLM_TEMPERATURE=0.7
 LLM_MAX_TOKENS=5000
 

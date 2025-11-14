@@ -1,4 +1,4 @@
-import type { ApiResponse, DayWithPhotos, TripResponse, Trip } from '../types';
+import type { ApiResponse, DayWithPhotos, TripResponse, Trip, Photo } from '../types';
 
 const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') || 'http://localhost:3000';
 
@@ -62,10 +62,56 @@ export function resolveMediaUrl(fileUrl?: string | null): string | null {
   return withBase(fileUrl);
 }
 
+async function uploadTripWithPhotos(
+  photos: File[],
+  name?: string
+): Promise<{ trip: Trip; uploadedCount: number; photos: Photo[] }> {
+  const url = withBase('/api/trips/upload');
+  const formData = new FormData();
+
+  // Add photos
+  photos.forEach((photo) => {
+    formData.append('photos', photo);
+  });
+
+  // Add optional trip name
+  if (name && name.trim()) {
+    formData.append('name', name.trim());
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      body: formData,
+    });
+  } catch (error) {
+    throw new Error('Unable to reach the TravelBack API. Is the backend running?');
+  }
+
+  let payload: ApiResponse<{ trip: Trip; uploadedCount: number; photos: Photo[] }>;
+  try {
+    payload = (await response.json()) as ApiResponse<{
+      trip: Trip;
+      uploadedCount: number;
+      photos: Photo[];
+    }>;
+  } catch {
+    throw new Error('Received an invalid response from the API.');
+  }
+
+  if (!payload.success) {
+    throw new Error(payload.error?.message ?? 'API request failed.');
+  }
+
+  return payload.data;
+}
+
 export const apiClient = {
   fetchTrips,
   fetchTrip,
   fetchDay,
   resolveMediaUrl,
+  uploadTripWithPhotos,
 };
 

@@ -5,9 +5,11 @@ import { apiClient } from '../api/client';
 interface PhotoThumbnailsProps {
   tripId: string;
   days: DayItinerary[];
+  hoveredPhotoId: string | null;
+  onPhotoHover: (photoId: string | null) => void;
 }
 
-export function PhotoThumbnails({ tripId, days }: PhotoThumbnailsProps) {
+export function PhotoThumbnails({ tripId, days, hoveredPhotoId, onPhotoHover }: PhotoThumbnailsProps) {
   const [dayPhotos, setDayPhotos] = useState<Map<number, Photo[]>>(new Map());
   const [loading, setLoading] = useState(true);
 
@@ -101,11 +103,23 @@ export function PhotoThumbnails({ tripId, days }: PhotoThumbnailsProps) {
               <div className="thumbnails-grid">
                 {photos.map((photo) => {
                   const imageUrl = apiClient.resolveMediaUrl(photo.fileUrl);
+                  const isHovered = hoveredPhotoId === photo.id;
                   return (
                     <div 
                       key={photo.id} 
-                      className="thumbnail"
+                      className={`thumbnail ${isHovered ? 'thumbnail-hovered' : ''}`}
                       onClick={() => scrollToPhoto(photo.id)}
+                      onMouseEnter={() => {
+                        // Only trigger if photo has location data
+                        if (photo.locationLatitude !== null && photo.locationLongitude !== null) {
+                          onPhotoHover(photo.id);
+                        }
+                      }}
+                      onMouseLeave={() => {
+                        if (photo.locationLatitude !== null && photo.locationLongitude !== null) {
+                          onPhotoHover(null);
+                        }
+                      }}
                       title={`Scroll to ${photo.filename}`}
                     >
                       {imageUrl ? (

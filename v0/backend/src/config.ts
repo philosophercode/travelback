@@ -87,8 +87,8 @@ export const config: Config = {
   },
   openai: {
     apiKey: getEnvVar('OPENAI_API_KEY'),
-    textModel: getEnvVar('LLM_TEXT_MODEL', 'gpt-4o-mini'),
-    visionModel: getEnvVar('LLM_VISION_MODEL', 'gpt-4o-mini'),
+    textModel: getEnvVar('LLM_TEXT_MODEL', 'gpt-5-nano'),
+    visionModel: getEnvVar('LLM_VISION_MODEL', 'gpt-5-nano'),
     temperature: getEnvFloat('LLM_TEMPERATURE', 0.7),
     maxTokens: getEnvNumber('LLM_MAX_TOKENS', 5000),
   },

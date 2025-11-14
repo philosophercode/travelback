@@ -78,6 +78,9 @@ docker-compose.override.yml
 *.sqlite
 *.sqlite3
 *.db-journal
+backups/
+**/backups/
+*.sql.backup
 
 # Temporary files
 tmp/

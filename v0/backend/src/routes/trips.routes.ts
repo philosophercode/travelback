@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   createTrip,
+  createTripWithPhotos,
   uploadPhotos,
   processTrip,
   listTrips,
@@ -24,6 +25,12 @@ router.get('/', asyncHandler(listTrips));
  * Create a new trip
  */
 router.post('/', asyncHandler(createTrip));
+
+/**
+ * POST /api/trips/upload
+ * Create a new trip and upload photos in one request
+ */
+router.post('/upload', uploadMiddleware, asyncHandler(createTripWithPhotos));
 
 /**
  * POST /api/trips/:id/photos

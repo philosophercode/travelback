@@ -25,6 +25,36 @@
   color: #666;
 }
 
+.app-nav {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.nav-button {
+  padding: 0.5rem 1.5rem;
+  background: white;
+  border: 2px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.nav-button:hover {
+  border-color: #4a90e2;
+  color: #4a90e2;
+}
+
+.nav-button.active {
+  background: #4a90e2;
+  border-color: #4a90e2;
+  color: white;
+}
+
 .app-main {
   margin-top: 2rem;
 }
@@ -50,6 +80,44 @@
   border: 1px solid #ddd;
   border-radius: 4px;
   background: white;
+}
+
+.trip-selector select optgroup {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #555;
+  padding: 0.25rem 0;
+}
+
+.trip-selector select optgroup[label*="Completed"] {
+  color: #2e7d32;
+}
+
+.trip-selector select optgroup[label*="Incomplete"] {
+  color: #f57c00;
+}
+
+.trip-selector select option {
+  padding: 0.5rem;
+  font-weight: normal;
+}
+
+.toggle-incomplete {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.toggle-incomplete input[type="checkbox"] {
+  cursor: pointer;
+}
+
+.toggle-incomplete span {
+  color: #666;
+  user-select: none;
 }
 
 .loading,
@@ -92,10 +160,30 @@
   color: #666;
 }
 
-.photo-thumbnails {
+.photos-and-map-container {
+  display: flex;
+  gap: 1.5rem;
   margin-top: 1.5rem;
   padding-top: 1.5rem;
   border-top: 1px solid #e0e0e0;
+  align-items: flex-start;
+  overflow: visible;
+}
+
+.photo-thumbnails {
+  flex: 1;
+  min-width: 0;
+  overflow: visible;
+}
+
+.thumbnails-by-day {
+  overflow: visible;
+}
+
+
+.trip-map {
+  flex: 1;
+  min-width: 0;
 }
 
 .photo-thumbnails .loading-text {
@@ -121,6 +209,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  overflow: visible;
 }
 
 .day-thumbnails-title {
@@ -144,6 +233,9 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+  overflow: visible;
+  padding: 100px;
+  margin: -100px;
 }
 
 .thumbnail {
@@ -154,12 +246,30 @@
   border: 2px solid #e0e0e0;
   background: #f0f0f0;
   cursor: pointer;
-  transition: transform 0.2s, border-color 0.2s;
+  transition: transform 0.3s ease, border-color 0.2s, z-index 0.3s;
+  position: relative;
+  z-index: 1;
+  transform-origin: center center;
 }
 
 .thumbnail:hover {
   transform: scale(1.05);
   border-color: #1976d2;
+  z-index: 10;
+}
+
+.thumbnail-hovered {
+  transform: scale(2.5);
+  z-index: 1000;
+  border-color: #1976d2;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  transition: transform 0.3s ease, border-color 0.2s, z-index 0.3s, box-shadow 0.3s ease;
+  overflow: visible;
+  transform-origin: center center;
+}
+
+.thumbnail-hovered img {
+  border-radius: 6px;
 }
 
 .thumbnail img {
@@ -396,6 +506,88 @@
   color: #666;
 }
 
+.trip-map {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+}
+
+.map-title {
+  margin: 0 0 0.5rem 0;
+  color: #2c3e50;
+  font-size: 1.3rem;
+}
+
+.map-subtitle {
+  margin: 0 0 1rem 0;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.map-container {
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #e0e0e0;
+}
+
+.map-leaflet-container {
+  height: 500px;
+  width: 100%;
+}
+
+.map-popup {
+  min-width: 200px;
+}
+
+.map-popup strong {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: #2c3e50;
+}
+
+.map-popup .popup-location {
+  margin: 0.25rem 0;
+  color: #1976d2;
+  font-size: 0.9rem;
+}
+
+.map-popup .popup-date {
+  margin: 0.25rem 0;
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.map-popup .popup-subject {
+  margin: 0.5rem 0;
+  color: #555;
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
+.popup-button {
+  margin-top: 0.5rem;
+  padding: 0.4rem 0.8rem;
+  background: #1976d2;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.2s;
+}
+
+.popup-button:hover {
+  background: #1565c0;
+}
+
+.no-locations {
+  color: #666;
+  font-style: italic;
+  margin: 1rem 0;
+}
+
 @media (max-width: 768px) {
   .app {
     padding: 1rem;
@@ -412,5 +604,32 @@
 
   .thumbnails-grid {
     gap: 0.4rem;
+  }
+
+  .photos-and-map-container {
+    flex-direction: column;
+  }
+
+  .trip-map {
+    order: -1;
+    padding: 1rem;
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+  }
+
+  .photo-thumbnails {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+  }
+
+  .thumbnail-hovered {
+    transform: scale(2);
+  }
+
+  .map-leaflet-container {
+    height: 400px !important;
   }
 }
