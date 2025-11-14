@@ -22,6 +22,11 @@ interface Config {
   };
   processing: {
     maxConcurrentPhotos: number;
+    imageResize: {
+      maxWidth: number;
+      maxHeight: number;
+      quality: number;
+    };
   };
 }
 
@@ -99,6 +104,11 @@ export const config: Config = {
   },
   processing: {
     maxConcurrentPhotos: getEnvNumber('MAX_CONCURRENT_PHOTOS', 3),
+    imageResize: {
+      maxWidth: getEnvNumber('IMAGE_RESIZE_MAX_WIDTH', 2048),
+      maxHeight: getEnvNumber('IMAGE_RESIZE_MAX_HEIGHT', 2048),
+      quality: getEnvNumber('IMAGE_RESIZE_QUALITY', 85),
+    },
   },
 };
 

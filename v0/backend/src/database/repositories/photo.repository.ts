@@ -5,8 +5,43 @@ import {
   PhotoDescription,
   LocationData,
   ProcessingStatus,
+  EXIFData,
 } from '../../types';
 import { logger } from '../../utils/logger';
+
+/**
+ * Sanitize EXIF data by removing null bytes from strings
+ * PostgreSQL cannot store null bytes (\u0000) in JSON/text fields
+ */
+function sanitizeExifData(exifData: EXIFData | undefined): EXIFData | null {
+  if (!exifData) {
+    return null;
+  }
+
+  const sanitized: EXIFData = {};
+
+  for (const [key, value] of Object.entries(exifData)) {
+    if (value === null || value === undefined) {
+      continue;
+    }
+
+    if (typeof value === 'string') {
+      // Remove null bytes from strings
+      sanitized[key] = value.replace(/\u0000/g, '');
+    } else if (typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+      // Recursively sanitize nested objects
+      const nestedSanitized = sanitizeExifData(value as EXIFData);
+      if (nestedSanitized) {
+        sanitized[key] = nestedSanitized;
+      }
+    } else {
+      // Keep other types as-is (numbers, arrays, dates, etc.)
+      sanitized[key] = value;
+    }
+  }
+
+  return sanitized;
+}
 
 export class PhotoRepository {
   /**
@@ -22,13 +57,14 @@ export class PhotoRepository {
       RETURNING *
     `;
 
+    const sanitizedExifData = sanitizeExifData(data.exifData);
     const result = await pool.query(query, [
       data.tripId,
       data.filename,
       data.filePath,
       data.fileUrl || null,
       data.capturedAt || null,
-      data.exifData ? JSON.stringify(data.exifData) : null,
+      sanitizedExifData ? JSON.stringify(sanitizedExifData) : null,
     ]);
 
     return this.mapRowToPhoto(result.rows[0]);
@@ -45,20 +81,20 @@ export class PhotoRepository {
     const pool = getPool();
     const values: unknown[] = [];
     const placeholders: string[] = [];
-    let paramCount = 1;
 
     photos.forEach((photo, index) => {
       const base = index * 6;
       placeholders.push(
         `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6})`
       );
+      const sanitizedExifData = sanitizeExifData(photo.exifData);
       values.push(
         photo.tripId,
         photo.filename,
         photo.filePath,
         photo.fileUrl || null,
         photo.capturedAt || null,
-        photo.exifData ? JSON.stringify(photo.exifData) : null
+        sanitizedExifData ? JSON.stringify(sanitizedExifData) : null
       );
     });
 

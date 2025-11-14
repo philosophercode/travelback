@@ -102,6 +102,11 @@ STORAGE_PROVIDER=local
 UPLOAD_DIR=./uploads
 MAX_FILE_SIZE_MB=10
 MAX_CONCURRENT_PHOTOS=3
+
+# Image Resize (for AI processing - originals are kept intact)
+IMAGE_RESIZE_MAX_WIDTH=2048
+IMAGE_RESIZE_MAX_HEIGHT=2048
+IMAGE_RESIZE_QUALITY=85
 ```
 
 ### 3. Start PostgreSQL
@@ -405,6 +410,9 @@ See `.env.example` for all options.
 - `UPLOAD_DIR` - Local storage directory (default: ./uploads)
 - `MAX_FILE_SIZE_MB` - Max upload size (default: 10)
 - `MAX_CONCURRENT_PHOTOS` - Parallel processing limit (default: 3)
+- `IMAGE_RESIZE_MAX_WIDTH` - Max width for AI processing (default: 2048)
+- `IMAGE_RESIZE_MAX_HEIGHT` - Max height for AI processing (default: 2048)
+- `IMAGE_RESIZE_QUALITY` - JPEG quality 1-100 for resized images (default: 85)
 
 ---
 

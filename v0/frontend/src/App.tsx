@@ -10,15 +10,18 @@ import { apiClient } from './api/client';
 import './App.css';
 
 function App() {
-  // Read tripId and page from URL parameters on initial load
+  // Read tripId from URL query parameters and page from pathname
   const getTripIdFromUrl = (): string | null => {
     const params = new URLSearchParams(window.location.search);
     return params.get('tripId');
   };
 
   const getPageFromUrl = (): string => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get('page') || 'view';
+    const pathname = window.location.pathname;
+    if (pathname === '/upload') {
+      return 'upload';
+    }
+    return 'view';
   };
 
   const [selectedTripId, setSelectedTripId] = useState<string | null>(getTripIdFromUrl());
@@ -36,14 +39,18 @@ function App() {
     } else {
       params.delete('tripId');
     }
-    if (currentPage !== 'view') {
-      params.set('page', currentPage);
-    } else {
-      params.delete('page');
+    
+    // Set pathname based on page
+    let pathname = '/';
+    if (currentPage === 'upload') {
+      pathname = '/upload';
     }
-    const newUrl = params.toString()
-      ? `${window.location.pathname}?${params.toString()}`
-      : window.location.pathname;
+    
+    // Build new URL with pathname and query params
+    const queryString = params.toString();
+    const newUrl = queryString
+      ? `${pathname}?${queryString}`
+      : pathname;
     window.history.replaceState({}, '', newUrl);
   }, [selectedTripId, currentPage]);
 
@@ -63,6 +70,8 @@ function App() {
   const handleUploadSuccess = (trip: Trip) => {
     setSelectedTripId(trip.id);
     setCurrentPage('view');
+    // Navigate to view page
+    window.history.replaceState({}, '', `/?tripId=${trip.id}`);
   };
 
   // Memoize days array to prevent unnecessary rerenders in child components
