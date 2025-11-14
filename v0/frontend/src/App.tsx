@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { TripSelector } from './components/TripSelector';
 import { TripCards } from './components/TripCards';
 import { TripOverview } from './components/TripOverview';
@@ -38,9 +38,16 @@ function App() {
   const [cancellingTrip, setCancellingTrip] = useState(false);
   const [showNarrationWizard, setShowNarrationWizard] = useState(false);
   const [processingProgress, setProcessingProgress] = useState<ProcessingProgress | null>(null);
+  const [isClearingTrip, setIsClearingTrip] = useState(false);
+  const viewTripsButtonRef = useRef<HTMLButtonElement>(null);
 
-  // Update URL when tripId or page changes
+  // Update URL when tripId or page changes (but not when we're intentionally clearing)
   useEffect(() => {
+    if (isClearingTrip) {
+      setIsClearingTrip(false);
+      return;
+    }
+    
     const params = new URLSearchParams(window.location.search);
     if (selectedTripId) {
       params.set('tripId', selectedTripId);
@@ -60,7 +67,7 @@ function App() {
       ? `${pathname}?${queryString}`
       : pathname;
     window.history.replaceState({}, '', newUrl);
-  }, [selectedTripId, currentPage]);
+  }, [selectedTripId, currentPage, isClearingTrip]);
 
   // Listen for browser back/forward navigation
   useEffect(() => {
@@ -81,6 +88,35 @@ function App() {
     // Navigate to view page
     window.history.replaceState({}, '', `/?tripId=${trip.id}`);
   };
+
+  // Ensure View Trips button has correct type attribute
+  useEffect(() => {
+    if (viewTripsButtonRef.current && viewTripsButtonRef.current.type !== 'button') {
+      viewTripsButtonRef.current.type = 'button';
+    }
+  }, [currentPage]);
+
+  // Handle View Trips button click
+  const handleViewTripsClick = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('View Trips button clicked - clearing trip selection');
+    
+    // Ensure button type is set (workaround for React not rendering type attribute)
+    if (e.currentTarget.type !== 'button') {
+      e.currentTarget.type = 'button';
+    }
+    
+    // Set flag to prevent URL sync from interfering
+    setIsClearingTrip(true);
+    // Update URL first to clear tripId
+    window.history.replaceState({}, '', '/');
+    // Then clear all state - use functional updates to ensure they happen
+    setSelectedTripId(() => null);
+    setTripData(() => null);
+    setError(() => null);
+    setCurrentPage(() => 'view');
+  }, []);
 
   // Handle trip deletion
   const handleDeleteTrip = async () => {
@@ -218,11 +254,10 @@ function App() {
         <p>View your trip photos, descriptions, and narratives</p>
         <nav className="app-nav">
           <button
+            type="button"
+            ref={viewTripsButtonRef}
             className={`nav-button ${currentPage === 'view' ? 'active' : ''}`}
-            onClick={() => {
-              setCurrentPage('view');
-              setSelectedTripId(null);
-            }}
+            onClick={handleViewTripsClick}
           >
             View Trips
           </button>
@@ -255,10 +290,12 @@ function App() {
           }} />
         ) : (
           <>
-            <TripSelector
-              selectedTripId={selectedTripId}
-              onTripSelect={setSelectedTripId}
-            />
+            {selectedTripId && (
+              <TripSelector
+                selectedTripId={selectedTripId}
+                onTripSelect={setSelectedTripId}
+              />
+            )}
 
         {loading && <div className="loading">Loading trip...</div>}
 
